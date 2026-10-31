@@ -27,6 +27,8 @@ final class AppContainer {
     let videoComposition: any VideoCompositionRepository
     /// Synthesized demo song with a known guide (ZV-06).
     let demo: SynthesizedDemoRepository
+    /// Save to Photos on the export screen (ZV-13).
+    let videoLibrary: any VideoLibrarySaving
 
     init(configuration: PoCConfiguration,
          demo: SynthesizedDemoRepository,
@@ -38,7 +40,8 @@ final class AppContainer {
          referencePlayback: any ReferencePlaybackRepository,
          audioRoute: any AudioRouteMonitor,
          takeLog: any SessionTakeLogRepository,
-         videoComposition: any VideoCompositionRepository) {
+         videoComposition: any VideoCompositionRepository,
+         videoLibrary: any VideoLibrarySaving) {
         self.configuration = configuration
         self.demo = demo
         self.stemSeparation = stemSeparation
@@ -50,6 +53,7 @@ final class AppContainer {
         self.audioRoute = audioRoute
         self.takeLog = takeLog
         self.videoComposition = videoComposition
+        self.videoLibrary = videoLibrary
     }
 
     /// What the app runs with. Fakes for now; swap each line as real implementations land.
@@ -66,7 +70,8 @@ final class AppContainer {
             referencePlayback: FakeReferencePlaybackRepository(),
             audioRoute: FakeAudioRouteMonitor(),
             takeLog: FakeSessionTakeLogRepository(),
-            videoComposition: FakeVideoCompositionRepository()
+            videoComposition: FakeVideoCompositionRepository(),
+            videoLibrary: PhotoLibraryVideoSaver()
         )
     }
 
@@ -83,7 +88,8 @@ final class AppContainer {
             referencePlayback: FakeReferencePlaybackRepository(),
             audioRoute: FakeAudioRouteMonitor(),
             takeLog: FakeSessionTakeLogRepository(),
-            videoComposition: FakeVideoCompositionRepository(duration: .zero)
+            videoComposition: FakeVideoCompositionRepository(duration: .zero),
+            videoLibrary: FakeVideoLibrarySaver()
         )
     }
 }

@@ -37,9 +37,8 @@ struct RootView: View {
                     flow.sessionEnded(with: DomainFixtures.compingPlan(configuration: flow.container.configuration))
                 }
             case .export:
-                PlaceholderScreen(title: "Export", owner: "Zildjian", backlogID: "ZV-13",
-                                  detail: exportDetail, actionTitle: "Start over") {
-                    flow.startOver()
+                if let plan = flow.compingPlan {
+                    ExportPreviewView(viewModel: makeCompingViewModel(plan: plan), onStartOver: flow.startOver)
                 }
             }
         }
@@ -52,9 +51,12 @@ struct RootView: View {
         return "\(song.segments.count) segments · \(shift >= 0 ? "+" : "")\(shift) semitones"
     }
 
-    private var exportDetail: String? {
-        guard let plan = flow.compingPlan else { return nil }
-        return "\(plan.validTakes.count) of \(plan.segments.count) segments\(plan.isPartial ? " (partial)" : "")"
+    private func makeCompingViewModel(plan: CompingCompositionPlan) -> CompingViewModel {
+        let container = flow.container
+        return CompingViewModel(
+            plan: plan,
+            useCase: AutoCompingVideoUseCase(takeLog: container.takeLog, videoComposition: container.videoComposition),
+            videoLibrary: container.videoLibrary)
     }
 }
 
