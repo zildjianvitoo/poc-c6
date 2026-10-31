@@ -2,6 +2,7 @@
 
 **Peran:** Persiapan lagu (baris 1 board): Impor → Pisah stem → Audio→MIDI → Guide + segmen → Transposisi.
 **Output utama:** `PreparedSong` yang lolos `validate()` (PRD §12.2).
+**Branch kamu:** `ikzaz` (jangan commit ke `main`, lihat `docs/COLLABORATION.md` §6).
 
 Prioritas: **P0** = wajib untuk milestone, **P1** = penting, **P2** = kalau sempat.
 Milestone: **M1** kontrak beku · **M2** end-to-end demo sintetis · **M3** end-to-end lagu demo asli · **M4** keputusan Track B.

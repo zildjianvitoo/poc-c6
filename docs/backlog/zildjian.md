@@ -2,6 +2,7 @@
 
 **Peran:** Comping & export (baris 4 board) + integrator: End Record → Pilih take LOLOS → Potong, tempatkan, mix, export → Preview.
 **Output utama:** `FinalCoverVideo.mp4` (vokal user + instrumental) dan app yang menyatukan kerja semua orang.
+**Branch kamu:** `zildjian` (jangan commit ke `main`, lihat `docs/COLLABORATION.md` §6).
 
 Prioritas: **P0** = wajib untuk milestone, **P1** = penting, **P2** = kalau sempat.
 Milestone: **M1** kontrak beku · **M2** end-to-end demo sintetis · **M3** end-to-end lagu demo asli · **M4** keputusan Track B.

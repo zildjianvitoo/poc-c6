@@ -38,5 +38,10 @@ Ignore `docs/archive/` (outdated PRD) and `docs/review-*.md` (discussion notes; 
 - If anything in `poc-c6/Domain/` was touched: `./scripts/check-contracts.sh` passes.
 - At handoff points, call the contract checks (`validate()` / `Contract.assertValid`), see `docs/COLLABORATION.md` §4.
 
+## Branches
+- **Never commit or push to `main`.** Each person works on their own branch: `ikzaz`, `takin`, `zildjian`. Before making changes, check the current branch (`git branch --show-current`); if it is `main`, stop and ask the user to switch.
+- Contract changes go on a short `contract/<topic>` branch instead (see `docs/COLLABORATION.md` §3).
+- Never force-push. Bring in `main` with `git merge origin/main`, not rebase.
+
 ## Commits
 Every commit message follows **Conventional Commits**: `<type>(<optional scope>): <description>`, e.g. `feat(capture): write raw video with AVAssetWriter`. Allowed types and scopes: `docs/COLLABORATION.md` §6. The `commit-msg` hook in `.githooks/` rejects anything else.

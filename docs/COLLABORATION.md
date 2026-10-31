@@ -45,13 +45,13 @@ Kabar baik: project ini memakai **folder yang tersinkron otomatis** di Xcode. Me
 
 Kontrak boleh berubah, asal semua orang tahu.
 
-1. Buka PR kecil yang **hanya** berisi perubahan kontrak, beri label `contract-change`.
+1. Buat branch `contract/<topik>` dari `main`, lalu buka PR kecil yang **hanya** berisi perubahan kontrak, beri label `contract-change`.
 2. Di deskripsi PR tulis: apa yang berubah, kenapa, dan siapa yang terdampak.
 3. Update `validate()` dan `DomainFixtures` kalau aturannya ikut berubah, dan tambahkan cek negatif di `scripts/contract-check/main.swift`.
 4. Jalankan `./scripts/check-contracts.sh`, harus hijau.
 5. Update PRD §6 di PR yang sama.
 6. **Wajib di-approve ketiga orang** (diatur lewat CODEOWNERS).
-7. Setelah merge, kabari di grup dan semua orang rebase hari itu juga.
+7. Setelah merge, kabari di grup dan semua orang merge `origin/main` ke branch masing-masing hari itu juga.
 
 | Jenis perubahan | Contoh | Dampak |
 |---|---|---|
@@ -103,11 +103,33 @@ Repo: https://github.com/zildjianvitoo/poc-c6
 git config core.hooksPath .githooks
 ```
 
-- `main` diproteksi: tidak boleh push langsung, wajib lewat PR.
-- Nama branch: `ikzaz/slice-segments`, `takin/capture-writer`, `zildjian/comping-audio`.
-- Satu PR = satu task backlog (sebut ID-nya di judul, mis. `TK-04 Capture with AVAssetWriter`).
-- Review minimal 1 orang; PR yang menyentuh `Domain/Entities|Repositories|Contracts` wajib 3 orang.
-- Rebase ke `main` minimal sekali sehari.
+### Branch: satu branch per orang
+
+| Orang | Branch |
+|---|---|
+| Ikzaz | `ikzaz` |
+| Takin | `takin` |
+| Zildjian | `zildjian` |
+
+**Mulai kerja (sekali):**
+```bash
+git switch -c ikzaz origin/main
+```
+```bash
+git push -u origin ikzaz
+```
+
+**Aturan:**
+- **Jangan pernah commit langsung ke `main`.** Selalu kerja di branch sendiri. `main` diproteksi, perubahan masuk hanya lewat PR.
+- **Ambil update `main` ke branch-mu minimal sekali sehari**, dan wajib setelah ada perubahan kontrak:
+  ```bash
+  git fetch origin && git merge origin/main
+  ```
+  Pakai `merge`, bukan `rebase`, supaya tidak perlu force-push branch yang sudah di-push.
+- **Buka PR dari branch-mu ke `main` setiap ada task backlog yang selesai**, jangan ditumpuk sampai akhir milestone. Setelah merged, branch tetap dipakai untuk task berikutnya. PR yang makin besar berarti makin susah direview dan makin rawan konflik.
+- Judul PR pakai format Conventional Commits; tulis ID backlog di deskripsi (mis. `TK-04`).
+- Review minimal 1 orang.
+- **Pengecualian, perubahan kontrak:** buat branch pendek `contract/<topik>` dari `main` yang hanya berisi perubahan kontrak (lihat §3), wajib di-review 3 orang, lalu hapus setelah merged.
 - Jangan commit: lagu ber-copyright, file video hasil rekaman, `xcuserdata/`.
 
 ### Format commit: Conventional Commits (wajib)
@@ -167,7 +189,7 @@ feat(contract)!: rename audioDuration to duration
 | Setiap hari (async di grup) | Kemarin apa, hari ini apa, ada yang menghambat? |
 | Hari pertama | Review & bekukan kontrak (M1) |
 | Setiap akhir milestone | Integration day: gabungkan semua, jalankan di device, cek acceptance criteria PRD §10 |
-| Kalau ada perubahan kontrak | Kabari di grup sebelum dan sesudah merge |
+| Kalau ada perubahan kontrak | Kabari di grup sebelum dan sesudah merge; semua merge `origin/main` ke branch-nya |
 
 ## 9. Definition of Done (per task)
 - [ ] Build sukses, tidak ada warning baru
