@@ -48,6 +48,7 @@ struct RootView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.default, value: flow.step)
         .overlay(alignment: .topTrailing) {
             #if DEBUG

@@ -89,7 +89,10 @@ struct ExportPreviewView: View {
                 Button {
                     Task { await viewModel.saveToPhotos() }
                 } label: {
-                    saveLabel.frame(maxWidth: .infinity)
+                    saveLabel
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .disabled(viewModel.saveState == .saving || viewModel.saveState == .saved)
