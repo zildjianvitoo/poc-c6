@@ -194,6 +194,7 @@ feat(contract)!: rename audioDuration to duration
 ## 9. Definition of Done (per task)
 - [ ] Build sukses, tidak ada warning baru
 - [ ] `./scripts/check-contracts.sh` hijau (kalau menyentuh `Domain/`)
+- [ ] `./scripts/check-comping.sh` hijau (kalau menyentuh `Data/Composition/`)
 - [ ] Pengecek kontrak dipanggil di titik serah-terima (kalau ada)
 - [ ] Diuji di iPhone fisik untuk fitur kamera/audio
 - [ ] Kriteria "Selesai kalau" di backlog terpenuhi

@@ -36,6 +36,7 @@ Ignore `docs/archive/` (outdated PRD) and `docs/review-*.md` (discussion notes; 
 ## Before you finish
 - The app builds: `xcodebuild -project poc-c6.xcodeproj -scheme poc-c6 -destination 'generic/platform=iOS Simulator' build`
 - If anything in `poc-c6/Domain/` was touched: `./scripts/check-contracts.sh` passes.
+- If anything in `poc-c6/Data/Composition/` was touched: `./scripts/check-comping.sh` passes.
 - At handoff points, call the contract checks (`validate()` / `Contract.assertValid`), see `docs/COLLABORATION.md` §4.
 
 ## Branches
