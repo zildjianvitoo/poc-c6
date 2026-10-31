@@ -28,6 +28,8 @@ final class AppFlow {
     init(container: AppContainer) {
         self.container = container
         step = container.vocalRange.load() == nil ? .vocalRange : .importSong
+        // Leftovers from a session that ended in a crash.
+        SessionFiles.cleanUp()
     }
 
     /// Vocal range screen (Ikzaz) saved a range.
@@ -51,10 +53,12 @@ final class AppFlow {
         }
     }
 
-    /// Ready screen: user tapped Record.
+    /// Ready screen: user tapped Record. A new session starts, so files from the last one go (ZV-16).
     func startRecording() {
         guard preparedSong != nil else { return }
         container.takeLog.clear()
+        SessionFiles.cleanUp()
+        try? SessionFiles.prepareDirectory()
         step = .recording
     }
 
@@ -80,5 +84,11 @@ final class AppFlow {
 
     func retestVocalRange() {
         step = .vocalRange
+    }
+
+    /// Debug Settings saved new values (ZV-15). Takes effect the next time a value is read.
+    func updateConfiguration(_ configuration: PoCConfiguration, store: ConfigurationStore = ConfigurationStore()) {
+        container.configuration = configuration
+        store.save(configuration)
     }
 }

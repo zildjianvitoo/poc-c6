@@ -205,7 +205,7 @@ Task {
         let fullDirectory = outputDirectory.appendingPathComponent("full", isDirectory: true)
         try FileManager.default.createDirectory(at: fullDirectory, withIntermediateDirectories: true)
         let started = Date()
-        let fullURL = try await VideoCompositionRepositoryImpl(outputDirectory: fullDirectory)
+        let fullURL = try await VideoCompositionRepositoryImpl(outputURL: fullDirectory.appendingPathComponent("FinalCoverVideo.mp4"))
             .stitchAndExport(plan: plan(takeCount: 3, rawURL: rawURL, instrumentalURL: instrumentalURL, instrumentalGain: 0)) { _ in }
         let exportSeconds = Date().timeIntervalSince(started)
         let full = AVURLAsset(url: fullURL)
@@ -245,7 +245,7 @@ Task {
         // Partial export: 2 of 3 segments with the instrumental fading out.
         let partialDirectory = outputDirectory.appendingPathComponent("partial", isDirectory: true)
         try FileManager.default.createDirectory(at: partialDirectory, withIntermediateDirectories: true)
-        let partialURL = try await VideoCompositionRepositoryImpl(outputDirectory: partialDirectory)
+        let partialURL = try await VideoCompositionRepositoryImpl(outputURL: partialDirectory.appendingPathComponent("FinalCoverVideo.mp4"))
             .stitchAndExport(plan: plan(takeCount: 2, rawURL: rawURL, instrumentalURL: instrumentalURL, instrumentalGain: 0.8)) { _ in }
         let partialDuration = try await AVURLAsset(url: partialURL).load(.duration).seconds
         check("partial export", abs(partialDuration - 9) < 0.05, String(format: "%.3f s (expected 9.000)", partialDuration))

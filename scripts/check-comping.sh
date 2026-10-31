@@ -10,6 +10,7 @@ WORK="$(mktemp -d)"
 xcrun swiftc -D DEBUG \
   $(find "$ROOT/poc-c6/Domain" -name '*.swift') \
   $(find "$ROOT/poc-c6/Data/Composition" -name '*.swift') \
+  "$ROOT/poc-c6/Shared/Storage/SessionFiles.swift" \
   "$ROOT/scripts/comping-check/main.swift" \
   -o "$WORK/comping-check"
 

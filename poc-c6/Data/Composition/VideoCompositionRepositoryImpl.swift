@@ -10,15 +10,13 @@ import AVFoundation
 import CoreMedia
 
 nonisolated final class VideoCompositionRepositoryImpl: VideoCompositionRepository {
-    static let outputFileName = "FinalCoverVideo.mp4"
-
-    let outputDirectory: URL
+    let outputURL: URL
     /// 1920×1080 caps a portrait recording at 1080×1920 and encodes H.264 + AAC.
     let presetName: String
 
-    init(outputDirectory: URL = FileManager.default.temporaryDirectory,
+    init(outputURL: URL = SessionFiles.finalVideoURL,
          presetName: String = AVAssetExportPreset1920x1080) {
-        self.outputDirectory = outputDirectory
+        self.outputURL = outputURL
         self.presetName = presetName
     }
 
@@ -35,7 +33,8 @@ nonisolated final class VideoCompositionRepositoryImpl: VideoCompositionReposito
         session.timeRange = CMTimeRange(start: .zero,
                                         end: CMTime(seconds: plan.endTime, preferredTimescale: CompingCompositionBuilder.timescale))
 
-        let url = outputDirectory.appendingPathComponent(Self.outputFileName)
+        let url = outputURL
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: url)
 
         let progressTask = Task {
