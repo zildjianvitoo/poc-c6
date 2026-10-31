@@ -12,6 +12,7 @@ import SwiftUI
 
 struct RootView: View {
     let flow: AppFlow
+    @State private var showsDebugSettings = false
 
     var body: some View {
         Group {
@@ -48,6 +49,20 @@ struct RootView: View {
             }
         }
         .animation(.default, value: flow.step)
+        .overlay(alignment: .topTrailing) {
+            #if DEBUG
+            Button("Debug Settings", systemImage: "slider.horizontal.3") {
+                showsDebugSettings = true
+            }
+            .labelStyle(.iconOnly)
+            .padding()
+            #endif
+        }
+        .sheet(isPresented: $showsDebugSettings) {
+            DebugSettingsView(configuration: flow.container.configuration,
+                              onSave: { flow.updateConfiguration($0) },
+                              onRetestVocalRange: { flow.retestVocalRange() })
+        }
     }
 
     private var readyDetail: String? {

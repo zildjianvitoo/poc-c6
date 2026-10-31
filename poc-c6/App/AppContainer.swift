@@ -64,7 +64,7 @@ final class AppContainer {
     static func makeDefault() -> AppContainer {
         let demo = SynthesizedDemoRepository()
         return AppContainer(
-            configuration: .default,
+            configuration: ConfigurationStore().load(),
             demo: demo,
             stemSeparation: demo,
             audioAnalysis: FakeAudioAnalysisRepository(),
