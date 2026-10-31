@@ -23,8 +23,8 @@ struct RootView: View {
                 }
             case .importSong:
                 PlaceholderScreen(title: "Import Song", owner: "Ikzaz", backlogID: "IK-11",
-                                  actionTitle: "Use sample song") {
-                    flow.songPrepared(DomainFixtures.preparedSong)
+                                  actionTitle: "Use synthesized demo") {
+                    Task { await flow.loadDemoSong() }
                 }
             case .ready:
                 PlaceholderScreen(title: "Ready", owner: "Ikzaz", backlogID: "IK-11",

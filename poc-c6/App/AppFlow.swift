@@ -42,6 +42,15 @@ final class AppFlow {
         step = .ready
     }
 
+    /// Loads the synthesized demo song (ZV-06) and continues as if it was imported.
+    func loadDemoSong() async {
+        do {
+            songPrepared(try await container.demo.preparedSong())
+        } catch {
+            assertionFailure("Synthesized demo failed: \(error)")
+        }
+    }
+
     /// Ready screen: user tapped Record.
     func startRecording() {
         guard preparedSong != nil else { return }

@@ -25,8 +25,11 @@ final class AppContainer {
 
     // Zildjian
     let videoComposition: any VideoCompositionRepository
+    /// Synthesized demo song with a known guide (ZV-06).
+    let demo: SynthesizedDemoRepository
 
     init(configuration: PoCConfiguration,
+         demo: SynthesizedDemoRepository,
          stemSeparation: any StemSeparationRepository,
          audioAnalysis: any AudioAnalysisRepository,
          audioTransposition: any AudioTranspositionRepository,
@@ -37,6 +40,7 @@ final class AppContainer {
          takeLog: any SessionTakeLogRepository,
          videoComposition: any VideoCompositionRepository) {
         self.configuration = configuration
+        self.demo = demo
         self.stemSeparation = stemSeparation
         self.audioAnalysis = audioAnalysis
         self.audioTransposition = audioTransposition
@@ -50,9 +54,11 @@ final class AppContainer {
 
     /// What the app runs with. Fakes for now; swap each line as real implementations land.
     static func makeDefault() -> AppContainer {
-        AppContainer(
+        let demo = SynthesizedDemoRepository()
+        return AppContainer(
             configuration: .default,
-            stemSeparation: FakeStemSeparationRepository(),
+            demo: demo,
+            stemSeparation: demo,
             audioAnalysis: FakeAudioAnalysisRepository(),
             audioTransposition: FakeAudioTranspositionRepository(),
             vocalRange: FakeVocalRangeRepository(),
@@ -68,6 +74,7 @@ final class AppContainer {
     static func fakes(vocalRange: VocalRange? = nil) -> AppContainer {
         AppContainer(
             configuration: .default,
+            demo: SynthesizedDemoRepository(),
             stemSeparation: FakeStemSeparationRepository(delay: .zero),
             audioAnalysis: FakeAudioAnalysisRepository(),
             audioTransposition: FakeAudioTranspositionRepository(),
