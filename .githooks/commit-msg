@@ -1,0 +1,22 @@
+#!/bin/sh
+# Rejects commit messages that do not follow Conventional Commits.
+# Enable once per clone: git config core.hooksPath .githooks
+
+subject=$(head -n 1 "$1")
+
+# Allow git's own merge/revert/fixup messages.
+case "$subject" in
+  Merge\ *|Revert\ *|fixup!\ *|squash!\ *) exit 0 ;;
+esac
+
+pattern='^(feat|fix|refactor|perf|test|docs|style|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: [^ ].{0,99}$'
+
+if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+  echo "✖ Commit message must follow Conventional Commits:" >&2
+  echo "    <type>(<scope>): <description>" >&2
+  echo "  types: feat fix refactor perf test docs style build ci chore revert" >&2
+  echo "  example: feat(capture): write raw video with AVAssetWriter" >&2
+  echo "  got:     $subject" >&2
+  echo "  See docs/COLLABORATION.md §6" >&2
+  exit 1
+fi
