@@ -29,6 +29,8 @@ final class AppContainer {
     let demo: SynthesizedDemoRepository
     /// Save to Photos on the export screen (ZV-13).
     let videoLibrary: any VideoLibrarySaving
+    /// Camera and microphone permissions for PermissionGate (ZV-14).
+    let permissions: any MediaPermissionProviding
 
     init(configuration: PoCConfiguration,
          demo: SynthesizedDemoRepository,
@@ -41,7 +43,8 @@ final class AppContainer {
          audioRoute: any AudioRouteMonitor,
          takeLog: any SessionTakeLogRepository,
          videoComposition: any VideoCompositionRepository,
-         videoLibrary: any VideoLibrarySaving) {
+         videoLibrary: any VideoLibrarySaving,
+         permissions: any MediaPermissionProviding) {
         self.configuration = configuration
         self.demo = demo
         self.stemSeparation = stemSeparation
@@ -54,6 +57,7 @@ final class AppContainer {
         self.takeLog = takeLog
         self.videoComposition = videoComposition
         self.videoLibrary = videoLibrary
+        self.permissions = permissions
     }
 
     /// What the app runs with. Fakes for now; swap each line as real implementations land.
@@ -71,7 +75,8 @@ final class AppContainer {
             audioRoute: FakeAudioRouteMonitor(),
             takeLog: FakeSessionTakeLogRepository(),
             videoComposition: FakeVideoCompositionRepository(),
-            videoLibrary: PhotoLibraryVideoSaver()
+            videoLibrary: PhotoLibraryVideoSaver(),
+            permissions: SystemMediaPermissions()
         )
     }
 
@@ -89,7 +94,8 @@ final class AppContainer {
             audioRoute: FakeAudioRouteMonitor(),
             takeLog: FakeSessionTakeLogRepository(),
             videoComposition: FakeVideoCompositionRepository(duration: .zero),
-            videoLibrary: FakeVideoLibrarySaver()
+            videoLibrary: FakeVideoLibrarySaver(),
+            permissions: FakeMediaPermissions()
         )
     }
 }

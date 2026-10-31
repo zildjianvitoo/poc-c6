@@ -3,8 +3,9 @@
 //  poc-c6
 //
 //  Shows the screen for the current AppFlow step. Owner: Zildjian Vito (ZV-04).
-//  To plug in your screen, replace its placeholder case below with your view
+//  To plug in your screen, replace its placeholder below with your view
 //  and call the matching AppFlow method when your step is done.
+//  Keep the PermissionGate around it: permissions are handled here, not in feature screens.
 //
 
 import SwiftUI
@@ -16,10 +17,12 @@ struct RootView: View {
         Group {
             switch flow.step {
             case .vocalRange:
-                PlaceholderScreen(title: "Vocal Range Test", owner: "Ikzaz", backlogID: "IK-10",
-                                  actionTitle: "Use sample range") {
-                    flow.container.vocalRange.save(VocalRange(lowestMIDI: 48, highestMIDI: 67))
-                    flow.vocalRangeSaved()
+                PermissionGate([.microphone], provider: flow.container.permissions) {
+                    PlaceholderScreen(title: "Vocal Range Test", owner: "Ikzaz", backlogID: "IK-10",
+                                      actionTitle: "Use sample range") {
+                        flow.container.vocalRange.save(VocalRange(lowestMIDI: 48, highestMIDI: 67))
+                        flow.vocalRangeSaved()
+                    }
                 }
             case .importSong:
                 PlaceholderScreen(title: "Import Song", owner: "Ikzaz", backlogID: "IK-11",
@@ -32,9 +35,11 @@ struct RootView: View {
                     flow.startRecording()
                 }
             case .recording:
-                PlaceholderScreen(title: "Recording", owner: "Takin", backlogID: "TK-10, TK-11",
-                                  actionTitle: "Simulate session (2 of 3 passed)") {
-                    flow.sessionEnded(with: DomainFixtures.compingPlan(configuration: flow.container.configuration))
+                PermissionGate([.camera, .microphone], provider: flow.container.permissions) {
+                    PlaceholderScreen(title: "Recording", owner: "Takin", backlogID: "TK-10, TK-11",
+                                      actionTitle: "Simulate session (2 of 3 passed)") {
+                        flow.sessionEnded(with: DomainFixtures.compingPlan(configuration: flow.container.configuration))
+                    }
                 }
             case .export:
                 if let plan = flow.compingPlan {

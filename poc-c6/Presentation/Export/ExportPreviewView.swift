@@ -104,12 +104,9 @@ struct ExportPreviewView: View {
     private func failedView(message: String) -> some View {
         VStack(spacing: 12) {
             Spacer()
-            ContentUnavailableView("Export failed", systemImage: "exclamationmark.triangle",
-                                   description: Text(message))
-            Button("Try Again") {
+            ErrorStateView(error: .exportFailed(details: message), actionTitle: "Try Again") {
                 Task { await viewModel.export() }
             }
-            .buttonStyle(.borderedProminent)
             Spacer()
         }
     }

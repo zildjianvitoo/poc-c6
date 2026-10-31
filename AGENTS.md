@@ -26,7 +26,8 @@ Ignore `docs/archive/` (outdated PRD) and `docs/review-*.md` (discussion notes; 
 - Segment indices are zero-based; UI shows `index + 1`.
 - `poc-c6/Domain/` may import only `Foundation` and `CoreMedia`.
 - One primary type per file, file name = type name, same file header style as existing files.
-- UI text in English.
+- UI text in English. Error wording comes from `UserFacingError` (show it with `ErrorStateView`); add a case there instead of writing a new message.
+- Camera/microphone permissions are handled by `PermissionGate` in `RootView`. Feature screens never request permissions themselves.
 
 ## Where files go
 - Swift code: inside `poc-c6/` (synchronized folder, picked up by Xcode automatically).

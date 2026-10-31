@@ -178,7 +178,8 @@ feat(contract)!: rename audioDuration to duration
 - Index segmen mulai dari 0; UI menampilkan `index + 1`.
 - Satu tipe utama per file, nama file = nama tipe.
 - `Domain/` hanya boleh import `Foundation` dan `CoreMedia` (dijaga oleh `check-contracts.sh`, karena script itu compile di macOS).
-- Teks UI dalam bahasa Inggris.
+- Teks UI dalam bahasa Inggris. Pesan error diambil dari `UserFacingError` dan ditampilkan dengan `ErrorStateView`; kalau butuh pesan baru, tambahkan case di sana.
+- Izin kamera/mic diurus `PermissionGate` di `RootView`. Layar fitur tidak perlu (dan tidak boleh) meminta izin sendiri.
 
 ---
 

@@ -50,7 +50,7 @@ scripts/, docs/
 | ✅ ZV-11 | `AutoCompingVideoUseCase`: buat `CompingCompositionPlan` dari take LOLOS, `Contract.assertValid` sebelum export | P0 | M2 | ZV-07 | Export penuh & sebagian (N = 1…M−1) jalan; N = 0 → pesan "Nothing to export yet" |
 | ZV-12 | **Pair dengan Takin** untuk verifikasi clock/titik potong (tes klik TK-05) | P0 | M2 | TK-05 | Akurasi potong ±1 frame terbukti di device |
 | ✅ ZV-13 | `ExportPreviewView` + `CompingViewModel`: progress, `VideoPlayer`, `ShareLink`, Save to Photos | P0 | M2 | ZV-10 | Video bisa diputar, dibagikan, disimpan |
-| ZV-14 | Layar izin kamera/mic/Photos + error handling umum (PRD §9), `INFOPLIST_KEY_*` usage descriptions (Photos sudah ada sejak ZV-13) | P0 | M3 | ZV-04 | Semua izin ditolak → layar penjelasan + tombol Settings |
+| ✅ ZV-14 | Layar izin kamera/mic/Photos + error handling umum (PRD §9), `INFOPLIST_KEY_*` usage descriptions (Photos sudah ada sejak ZV-13) | P0 | M3 | ZV-04 | Semua izin ditolak → layar penjelasan + tombol Settings |
 | ZV-15 | `DebugSettingsView` untuk `PoCConfiguration` (disimpan lokal) | P1 | M3 | ZV-04 | Ubah threshold tanpa build ulang |
 | ZV-16 | Hapus file sementara saat mulai sesi baru | P1 | M3 | ZV-11 | Storage tidak menumpuk |
 | ZV-17 | Integrasi M3: ganti fakes dengan implementasi asli, uji acceptance criteria PRD §10 di device | P0 | M3 | semua P0 | Checklist §10 terisi |
