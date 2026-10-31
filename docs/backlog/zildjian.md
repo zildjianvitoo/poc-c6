@@ -15,7 +15,7 @@ poc-c6/App/               poc_c6App, AppContainer, navigasi
 poc-c6/Domain/UseCases/   AutoCompingVideoUseCase
 poc-c6/Data/Composition/  VideoCompositionRepositoryImpl
 poc-c6/Data/Separation/   SynthesizedDemoRepository
-poc-c6/Fakes/             fake semua protocol (DEBUG)
+poc-c6/Fakes/             fake semua protocol
 poc-c6/Presentation/Export/, poc-c6/Presentation/Debug/, poc-c6/Presentation/Common/ (izin & error)
 poc-c6.xcodeproj          satu-satunya yang mengubah build settings
 scripts/, docs/

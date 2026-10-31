@@ -426,7 +426,7 @@ poc-c6/
     Contracts/    ContractValidation, DomainFixtures
     UseCases/     use cases from §6.4
   Shared/DSP/     YINPitchDetector (live pitch, vocal range test, YIN fallback)
-  Fakes/          fake implementations of every protocol (DEBUG)
+  Fakes/          fake implementations of every protocol (used until real ones land)
   Data/
     Separation/   Bundled, Synthesized, CenterChannel, CoreML (flagged)
     Audio/        BasicPitchAnalysisRepository, YINAnalysisRepository, AudioTranspositionRepositoryImpl,

@@ -6,9 +6,9 @@
 //
 //  Small, valid sample data so each owner can build and test their part
 //  without waiting for the others. Every fixture passes `validate()`.
+//  Not DEBUG-only: the fakes and placeholder screens use it in every build until real implementations land.
 //
 
-#if DEBUG
 import CoreMedia
 import Foundation
 
@@ -74,4 +74,3 @@ nonisolated enum DomainFixtures {
         )
     }
 }
-#endif
