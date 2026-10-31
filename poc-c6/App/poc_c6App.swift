@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct poc_c6App: App {
+    @State private var flow = AppFlow(container: .makeDefault())
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView(flow: flow)
         }
     }
 }
