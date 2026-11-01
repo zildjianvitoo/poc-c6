@@ -17,6 +17,7 @@ extension Notification.Name {
 nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
     // Recording format fixed by PRD §6.5.4 (portrait 1080×1920, see makeVideoInput).
     private static let framesPerSecond: Int32 = 30
+    static let portraitRotation: CGFloat = 90
     private static let audioSampleRate = 48_000.0
     private static let audioBitRate = 128_000
     /// ~3 s of 50 ms pitch samples, so a short main-thread stall does not drop any.
@@ -56,6 +57,9 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                         self.prepared = true
                     }
                     if !self.session.isRunning { self.session.startRunning() }
+                    // After commitConfiguration and startRunning: inside the configuration block the
+                    // connection may not report rotation as supported yet, and the request is lost.
+                    self.orientVideoConnection()
                     self.lock.lock()
                     self.clock = self.session.synchronizationClock ?? CMClockGetHostTimeClock()
                     self.lock.unlock()
@@ -87,18 +91,26 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
         guard session.canAddOutput(videoOutput), session.canAddOutput(audioOutput) else { throw error("Cannot configure capture outputs.") }
         session.addOutput(videoOutput)
         session.addOutput(audioOutput)
-        if let connection = videoOutput.connection(with: .video) {
-            if connection.isVideoRotationAngleSupported(90) { connection.videoRotationAngle = 90 }
-            if connection.isVideoMirroringSupported {
-                connection.automaticallyAdjustsVideoMirroring = false
-                connection.isVideoMirrored = true
-            }
-        }
         try camera.lockForConfiguration()
         defer { camera.unlockForConfiguration() }
         if camera.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= Double(Self.framesPerSecond) && $0.maxFrameRate >= Double(Self.framesPerSecond) }) {
             camera.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Self.framesPerSecond)
             camera.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Self.framesPerSecond)
+        }
+    }
+
+    /// Portrait (90°) and mirrored like a selfie (PRD §7.3). If a device still delivers landscape
+    /// frames, makeVideoInput stores them with a portrait transform instead.
+    private func orientVideoConnection() {
+        for output in session.outputs {
+            guard let connection = output.connection(with: .video) else { continue }
+            if connection.isVideoRotationAngleSupported(Self.portraitRotation) {
+                connection.videoRotationAngle = Self.portraitRotation
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = true
+            }
         }
     }
 
