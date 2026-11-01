@@ -47,8 +47,10 @@ func rawTime(forSongTime songTime: TimeInterval) -> TimeInterval? {
 // MARK: - Synthetic raw recording
 
 /// Frame index is encoded in the red and green channels in steps of 8 so it survives H.264.
-func writeRawVideo(to url: URL) async throws {
-    let width = 270, height = 480
+/// `landscape` mimics devices whose camera delivers sensor-orientation frames: 480×270 stored
+/// with a 90° portrait transform (CaptureRepositoryImpl.makeVideoInput).
+func writeRawVideo(to url: URL, landscape: Bool = false) async throws {
+    let width = landscape ? 480 : 270, height = landscape ? 270 : 480
     let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
         AVVideoCodecKey: AVVideoCodecType.h264,
@@ -56,6 +58,7 @@ func writeRawVideo(to url: URL) async throws {
         AVVideoHeightKey: height,
         AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 4_000_000],
     ])
+    if landscape { input.transform = CGAffineTransform(rotationAngle: .pi / 2) }
     let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
         kCVPixelBufferWidthKey as String: width,
@@ -113,8 +116,10 @@ func muxRawRecording(video: URL, audio: URL, to url: URL) async throws {
     let composition = AVMutableComposition()
     let videoAsset = AVURLAsset(url: video), audioAsset = AVURLAsset(url: audio)
     let range = CMTimeRange(start: .zero, duration: CMTime(seconds: rawDuration, preferredTimescale: 600))
-    try composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)!
-        .insertTimeRange(range, of: try await videoAsset.loadTracks(withMediaType: .video)[0], at: .zero)
+    let sourceVideo = try await videoAsset.loadTracks(withMediaType: .video)[0]
+    let videoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)!
+    try videoTrack.insertTimeRange(range, of: sourceVideo, at: .zero)
+    videoTrack.preferredTransform = try await sourceVideo.load(.preferredTransform)
     try composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)!
         .insertTimeRange(range, of: try await audioAsset.loadTracks(withMediaType: .audio)[0], at: .zero)
     let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough)!
@@ -249,6 +254,28 @@ Task {
             .stitchAndExport(plan: plan(takeCount: 2, rawURL: rawURL, instrumentalURL: instrumentalURL, instrumentalGain: 0.8)) { _ in }
         let partialDuration = try await AVURLAsset(url: partialURL).load(.duration).seconds
         check("partial export", abs(partialDuration - 9) < 0.05, String(format: "%.3f s (expected 9.000)", partialDuration))
+
+        // Orientation: portrait raw stays portrait; landscape frames with a 90° transform
+        // (devices that ignore the connection's rotation) also come out portrait, unsqueezed.
+        let landscapeVideoURL = outputDirectory.appendingPathComponent("raw-video-landscape.mov")
+        let landscapeRawURL = outputDirectory.appendingPathComponent("RawMasterVideo-landscape.mov")
+        try await writeRawVideo(to: landscapeVideoURL, landscape: true)
+        try await muxRawRecording(video: landscapeVideoURL, audio: audioURL, to: landscapeRawURL)
+        let rotatedDirectory = outputDirectory.appendingPathComponent("rotated", isDirectory: true)
+        try FileManager.default.createDirectory(at: rotatedDirectory, withIntermediateDirectories: true)
+        let rotatedURL = try await VideoCompositionRepositoryImpl(outputURL: rotatedDirectory.appendingPathComponent("FinalCoverVideo.mp4"))
+            .stitchAndExport(plan: plan(takeCount: 3, rawURL: landscapeRawURL, instrumentalURL: instrumentalURL, instrumentalGain: 0.8)) { _ in }
+        func displaySize(_ url: URL) async throws -> CGSize {
+            let track = try await AVURLAsset(url: url).loadTracks(withMediaType: .video)[0]
+            let (size, transform) = try await track.load(.naturalSize, .preferredTransform)
+            let shown = size.applying(transform)
+            return CGSize(width: abs(shown.width), height: abs(shown.height))
+        }
+        let portraitShown = try await displaySize(fullURL), rotatedShown = try await displaySize(rotatedURL)
+        let ratio = { (size: CGSize) in size.height / size.width }
+        check("portrait output", abs(ratio(portraitShown) - 16.0 / 9) < 0.02 && abs(ratio(rotatedShown) - 16.0 / 9) < 0.02,
+              String(format: "shown as %.0f×%.0f and %.0f×%.0f (landscape raw + 90° transform); expected 9:16",
+                     portraitShown.width, portraitShown.height, rotatedShown.width, rotatedShown.height))
 
         print("\nOutput: \(fullURL.path)")
     } catch {

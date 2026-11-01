@@ -15,8 +15,7 @@ extension Notification.Name {
 
 /// Capture and writer state belongs exclusively to queue; clock snapshots and subscribers use lock.
 nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
-    // Recording format fixed by PRD §6.5.4.
-    private static let videoSize = (width: 1080, height: 1920)
+    // Recording format fixed by PRD §6.5.4 (portrait 1080×1920, see makeVideoInput).
     private static let framesPerSecond: Int32 = 30
     private static let audioSampleRate = 48_000.0
     private static let audioBitRate = 128_000
@@ -138,15 +137,13 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                     let url = SessionFiles.rawVideoURL
                     try? FileManager.default.removeItem(at: url)
                     let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
-                    let video = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: Self.videoSize.width, AVVideoHeightKey: Self.videoSize.height])
+                    // The video input is added on the first frame, once its real size is known.
                     let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: Self.audioSampleRate, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: Self.audioBitRate])
-                    video.expectsMediaDataInRealTime = true
                     audio.expectsMediaDataInRealTime = true
-                    guard writer.canAdd(video), writer.canAdd(audio) else { throw self.error("Video encoder unavailable.") }
-                    writer.add(video)
+                    guard writer.canAdd(audio) else { throw self.error("Audio encoder unavailable.") }
                     writer.add(audio)
                     self.writer = writer
-                    self.videoInput = video
+                    self.videoInput = nil
                     self.audioInput = audio
                     self.destination = url
                     self.failure = nil
@@ -193,7 +190,11 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let isVideo = CMFormatDescriptionGetMediaType(description) == kCMMediaType_Video
         if writer.status == .unknown {
-            guard isVideo else { return }
+            guard isVideo, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+            let video = Self.makeVideoInput(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
+            guard writer.canAdd(video) else { failure = error("Video encoder unavailable."); return }
+            writer.add(video)
+            videoInput = video
             guard writer.startWriting() else { failure = writer.error ?? error("Cannot start video writer."); return }
             writer.startSession(atSourceTime: pts)
             lock.lock(); firstPTS = pts; lock.unlock()
@@ -221,6 +222,19 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                 self?.publish(sample)
             }
         }
+    }
+
+    /// Writes frames at the size the camera delivers them. The connection is asked to rotate to
+    /// portrait, but some devices still deliver landscape (sensor) frames; those are stored as
+    /// they are with a 90° portrait transform, instead of being squeezed into 1080×1920.
+    /// Mirroring was already applied by the connection, so the result is a mirrored selfie.
+    private static func makeVideoInput(width: Int, height: Int) -> AVAssetWriterInput {
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: width, AVVideoHeightKey: height,
+        ])
+        input.expectsMediaDataInRealTime = true
+        if width > height { input.transform = CGAffineTransform(rotationAngle: .pi / 2) }
+        return input
     }
 
     func pitchSamples() -> AsyncStream<PitchSample> {
