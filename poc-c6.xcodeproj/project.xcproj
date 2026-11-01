@@ -41,6 +41,8 @@
         "DEVELOPMENT_TEAM": "YU8G545MR2",
         "ENABLE_PREVIEWS": "YES",
         "GENERATE_INFOPLIST_FILE": "YES",
+        "INFOPLIST_KEY_NSCameraUsageDescription": "Record your cover with the front camera.",
+        "INFOPLIST_KEY_NSMicrophoneUsageDescription": "Mikrofon digunakan untuk mengukur nada nyanyian secara langsung di perangkat.",
         "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
         "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",
         "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",
