@@ -64,9 +64,13 @@ nonisolated enum PreparationPipelineChecks {
         try check(song.validate().isEmpty, "PreparedSong is valid: \(song.validate())")
         try check(song.separationMethod == .centerChannelCancellation, "center-channel method")
         let notes = song.segments.flatMap(\.targetNotes)
-        let expected = melody.map(\.0)
+        // The guide is simplified into singable blocks: compare against the simplified melody.
+        let simplified = SimplifyGuideUseCase().execute(melody.map {
+            TargetMIDINote(midiNote: $0.0, startTime: $0.1 - 5, duration: $0.2)
+        })
+        let expected = simplified.map(\.midiNote)
         try check(notes.map(\.midiNote) == expected, "guide notes \(notes.map(\.midiNote)) == \(expected)")
-        let worstStart = zip(notes, melody).map { abs(($0.startTime + 5) - $1.1) }.max() ?? 1
+        let worstStart = zip(notes, simplified).map { abs($0.startTime - $1.startTime) }.max() ?? 1
         try check(worstStart < 0.08, String(format: "note starts within 80 ms (worst %.0f ms)", worstStart * 1000))
         try check(song.segments.contains(where: \.isInstrumentalOnly), "interlude became an instrumental-only segment")
         try check(song.transposition.totalSemitones < 0, "transposed down for a low voice: \(song.transposition)")

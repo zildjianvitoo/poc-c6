@@ -23,19 +23,21 @@ nonisolated struct PrepareSongUseCase: Sendable {
         progress("Separating vocals and backing music")
         let stems = try await separation.separateStems(from: audioURL, trimRange: trimRange)
         progress("Extracting the vocal guide")
-        let notes: [TargetMIDINote]
+        let extracted: [TargetMIDINote]
         do {
             let primary = try await analysis.extractVocalGuideNotes(from: stems.vocalGuideURL)
             guard !primary.isEmpty else {
                 throw ContractViolation(contract: "Preparation", message: "No guide notes detected.")
             }
-            notes = primary
+            extracted = primary
         } catch {
             try Task.checkCancellation()
             guard let fallbackAnalysis else { throw error }
             progress("Using fallback pitch analysis")
-            notes = try await fallbackAnalysis.extractVocalGuideNotes(from: stems.vocalGuideURL)
+            extracted = try await fallbackAnalysis.extractVocalGuideNotes(from: stems.vocalGuideURL)
         }
+        // Fewer, longer blocks that a singer can follow (device feedback 2026-11-01).
+        let notes = SimplifyGuideUseCase().execute(extracted)
         guard !notes.isEmpty else {
             throw ContractViolation(contract: "Preparation", message: "We couldn't find a vocal melody in this section. Try another part of the song.")
         }

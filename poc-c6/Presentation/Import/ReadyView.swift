@@ -9,8 +9,12 @@ import SwiftUI
 
 struct ReadyView: View {
     let song: PreparedSong
+    let previewer: any AudioPreviewing
     let onRecord: () -> Void
     let onChooseAnother: () -> Void
+    @State private var playing: Track?
+
+    enum Track { case instrumental, original }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -27,6 +31,7 @@ struct ReadyView: View {
             }
             .padding()
             .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
+            previewButtons
             if song.separationMethod == .centerChannelCancellation {
                 Text("Background music uses basic vocal removal. Some original vocals may still be audible.")
                     .font(.footnote)
@@ -36,12 +41,42 @@ struct ReadyView: View {
             Label("Use earphones so the song doesn't leak into the microphone.", systemImage: "headphones")
                 .font(.footnote)
             Spacer()
-            Button("Record", action: onRecord)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            Button("Choose Another Song", action: onChooseAnother)
+            Button("Record") {
+                previewer.stop()
+                onRecord()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            Button("Choose Another Song") {
+                previewer.stop()
+                onChooseAnother()
+            }
         }
         .padding()
+        .onDisappear { previewer.stop() }
+    }
+
+    /// Listen to the background music alone (what ends up in the cover) or the original.
+    private var previewButtons: some View {
+        HStack(spacing: 12) {
+            previewButton("Background", systemImage: "music.note", track: .instrumental, url: song.instrumentalURL)
+            previewButton("Original", systemImage: "music.mic", track: .original, url: song.earphoneMixURL)
+        }
+    }
+
+    private func previewButton(_ title: String, systemImage: String, track: Track, url: URL) -> some View {
+        Button {
+            if playing == track {
+                previewer.stop()
+                playing = nil
+            } else if (try? previewer.play(url)) != nil {
+                playing = track
+            }
+        } label: {
+            Label(playing == track ? "Stop" : title, systemImage: playing == track ? "stop.fill" : systemImage)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
     }
 
     /// "−3 semitones · 1 octave down" style summary of the transposition.

@@ -33,7 +33,8 @@ struct RootView: View {
                 }
             case .ready:
                 if let song = flow.preparedSong {
-                    ReadyView(song: song, onRecord: flow.startRecording, onChooseAnother: flow.startOver)
+                    ReadyView(song: song, previewer: flow.container.audioPreview,
+                              onRecord: flow.startRecording, onChooseAnother: flow.startOver)
                 }
             case .recording:
                 PermissionGate([.camera, .microphone], provider: flow.container.permissions) {

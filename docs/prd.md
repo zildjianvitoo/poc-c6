@@ -87,6 +87,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 * **Fallback — CREPE:** run `CrepePitchDetector` over the vocal stem every 50 ms → frames below the confidence threshold are unvoiced → stable regions ≥ 120 ms (< ±50 cents variation) become notes. Used when Basic Pitch fails to load or produces no notes.
 * Notes are stored in the **original key**; transposition is applied at display/evaluation time.
 * **Frequency → MIDI** (CREPE paths, live pitch): $M = 69 + 12 \log_2(f/440)$, implemented once in a shared helper.
+* **Singable guide (`SimplifyGuideUseCase`, device feedback 2026-11-01):** extracted notes within a semitone and ≤ 0.35 s apart are merged into one block (dominant pitch), gaps ≤ 0.3 s are bridged, isolated notes < 0.25 s are dropped.
 * **Segmentation (`SliceSegmentsUseCase`):**
   1. Split where the gap between consecutive notes is > 0.8 s.
   2. Merge segments shorter than 3.0 s into the neighbour with the smaller gap, as long as the result is ≤ 8.0 s.
@@ -118,6 +119,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 * **Pitch frames:** every 50 ms; RMS noise gate −40 dBFS (below = unvoiced).
 * **Evaluated frames:** frames where a target note is active, **excluding the first 100 ms of each note** (attack). Frames with no target note are ignored.
 * **Hit:** user voiced AND `|Δcents| ≤ 50` against the target at time `t`, or any target note within ±100 ms of `t` (timing tolerance). $\Delta_{\text{cents}} = 100 \times (M_{\text{user}} - M_{\text{target}})$. A target-active frame where the user is silent is a **miss**.
+* **Octaves are ignored** when comparing pitch (singing the melody an octave lower/higher is in tune), and the trail is drawn in the target's octave *(device feedback 2026-11-01)*.
 * **Score** = hits / evaluated frames. PASSED if ≥ 0.75. A segment with zero evaluated frames auto-passes.
 * **Missed note** (flashed red) = note whose own hit ratio < 50%.
 * **Timing:** evaluation runs at `segment end + latencyOffset + 150 ms` (see §7.1).

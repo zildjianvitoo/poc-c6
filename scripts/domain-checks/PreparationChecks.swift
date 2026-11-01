@@ -49,7 +49,7 @@ nonisolated enum PreparationChecks {
                                          fallbackAnalysis: Guide(), transposition: Renderer())
         let output = try await pipeline.execute(audioURL: fixture.earphoneMixURL, trimRange: 0...fixture.duration, vocalRange: low)
         assert(output.transposition == down)
-        assert(output.segments.flatMap(\.targetNotes) == notes)
+        assert(output.segments.flatMap(\.targetNotes).map(\.midiNote) == SimplifyGuideUseCase().execute(notes).map(\.midiNote))
         assert(output.validate().isEmpty)
         let silent = PrepareSongUseCase(separation: Stems(), analysis: Guide(empty: true),
                                        fallbackAnalysis: Guide(empty: true), transposition: Renderer())
