@@ -8,6 +8,12 @@ import Foundation
 nonisolated struct EvaluateSegmentUseCase {
     var configuration = PoCConfiguration.default
 
+    /// Breaths, consonants and gaps between words are unvoiced even for the original singer
+    /// (~74% of frames voiced in a real song). So the score is hits among VOICED frames, as long
+    /// as the singer is voiced for at least this share of the evaluated frames; below it, silence
+    /// counts as misses again so not singing never passes (device feedback 2026-11-01, PRD §5.6).
+    static let minimumVoicedCoverage: Float = 0.6
+
     /// Frame slots sit on the grid anchored at `segment.audioStartTime` (slot k at `audioStartTime + k * pitchHop`),
     /// the same grid the practice loop produces evaluations on. A slot belongs to a note when its time is in
     /// `[note.startTime + attackIgnore, note.endTime)`. Each slot takes the evaluation nearest to it within
@@ -18,6 +24,7 @@ nonisolated struct EvaluateSegmentUseCase {
         let tolerance = ContractTolerance.timeline
         let sorted = evaluations.sorted { $0.referenceTime < $1.referenceTime }
         var total = 0
+        var voiced = 0
         var hits = 0
         var missed: [UUID] = []
         for note in segment.targetNotes {
@@ -30,7 +37,9 @@ nonisolated struct EvaluateSegmentUseCase {
                 let time = segment.audioStartTime + Double(slot) * hop
                 if time >= note.endTime - tolerance { break }
                 noteTotal += 1
-                if nearestEvaluation(in: sorted, to: time, within: hop / 2)?.isHit == true { noteHits += 1 }
+                let evaluation = nearestEvaluation(in: sorted, to: time, within: hop / 2)
+                if evaluation?.detectedMIDINote != nil { voiced += 1 }
+                if evaluation?.isHit == true { noteHits += 1 }
                 slot += 1
             }
             total += noteTotal
@@ -39,7 +48,10 @@ nonisolated struct EvaluateSegmentUseCase {
                 missed.append(note.id)
             }
         }
-        return (total == 0 ? 1 : Float(hits) / Float(total), missed)
+        guard total > 0 else { return (1, missed) }
+        let coverage = Float(voiced) / Float(total)
+        let score = coverage >= Self.minimumVoicedCoverage ? Float(hits) / Float(voiced) : Float(hits) / Float(total)
+        return (score, missed)
     }
 
     /// Binary search over evaluations sorted by `referenceTime`.

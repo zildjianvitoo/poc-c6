@@ -56,6 +56,24 @@ nonisolated enum GuideAndPitchChecks {
         try check(!evaluate(targetMIDI + 1).isHit, "a semitone off is a miss")
         try check(!evaluate(targetMIDI - 13).isHit, "an octave and a semitone off is a miss")
         try check(TrackLivePitchUseCase.octaveFolded(7) == -5 && TrackLivePitchUseCase.octaveFolded(-7) == 5, "folding wraps")
+
+        // Voiced-only scoring: breaths/consonants don't fail a segment, silence still does.
+        let phrase = SongSegment(index: 0, audioStartTime: 0, audioDuration: 4, targetNotes: [note(60, 0, 4)])
+        func evaluations(voicedShare: Double, inTune: Bool) -> [PitchEvaluation] {
+            (0..<80).map { slot in
+                let time = Double(slot) * 0.05 + 1e-6
+                let voiced = Double(slot % 10) < voicedShare * 10
+                return PitchEvaluation(referenceTime: time, detectedMIDINote: voiced ? 60 : nil, targetNoteID: nil,
+                                       centDeviation: voiced ? 0 : nil, isHit: voiced && inTune)
+            }
+        }
+        let evaluate = EvaluateSegmentUseCase()
+        let breathy = evaluate.execute(segment: phrase, evaluations: evaluations(voicedShare: 0.7, inTune: true)).score
+        try check(breathy >= 0.99, "70% voiced, all in tune → passes (\(breathy))")
+        let sparse = evaluate.execute(segment: phrase, evaluations: evaluations(voicedShare: 0.4, inTune: true)).score
+        try check(sparse < 0.5, "40% voiced → silence counts, fails (\(sparse))")
+        let offKey = evaluate.execute(segment: phrase, evaluations: evaluations(voicedShare: 0.9, inTune: false)).score
+        try check(offKey == 0, "voiced but out of tune → 0 (\(offKey))")
         return count
     }
 }
