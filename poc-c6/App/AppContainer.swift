@@ -16,6 +16,8 @@ final class AppContainer {
     let audioAnalysis: any AudioAnalysisRepository
     let audioTransposition: any AudioTranspositionRepository
     let vocalRange: any VocalRangeRepository
+    /// Reads picked song files for the import screen.
+    let audioInspector: any AudioFileInspecting = AudioFileInspector()
     /// Microphone pitch for the vocal range test.
     let livePitch: any LivePitchSource
 
@@ -68,8 +70,8 @@ final class AppContainer {
         self.simulatedSinger = simulatedSinger
     }
 
-    /// What the app runs with. Song preparation still uses the synthesized demo and fakes
-    /// until the M3 pipeline lands; recording and comping are real on a device.
+    /// What the app runs with: imported songs are prepared on the device (center-channel
+    /// separation, CREPE guide, offline transposition); recording and comping are real on a device.
     static func makeDefault() -> AppContainer {
         let demo = SynthesizedDemoRepository()
         let store = ConfigurationStore()
@@ -95,9 +97,9 @@ final class AppContainer {
         return AppContainer(
             configuration: store.load(),
             demo: demo,
-            stemSeparation: demo,
-            audioAnalysis: FakeAudioAnalysisRepository(),
-            audioTransposition: FakeAudioTranspositionRepository(),
+            stemSeparation: CenterChannelStemRepository(),
+            audioAnalysis: CrepeAnalysisRepository(),
+            audioTransposition: AudioTranspositionRepositoryImpl(),
             vocalRange: VocalRangeRepositoryImpl(),
             livePitch: livePitch,
             capture: capture,

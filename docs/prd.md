@@ -46,6 +46,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
   * **Stem separation — two-track strategy:**
     * **Track A — Guaranteed demo:** a bundled, royalty-free demo song whose stems (`mix`, `vocal`, `instrumental`) were separated **offline on a Mac** (e.g. Demucs) plus a verified guide file. Guarantees the end-to-end demo sounds good. Copyrighted songs must NOT be bundled in the repo/app.
     * **Track B — On-device spike (time-boxed 3–5 days):** evaluate a CoreML separation model for user-imported songs. Measure model size, processing time for a 60 s clip (target < 30 s), peak memory, and separation quality. If the spike fails, imported songs use the **center-channel cancellation fallback** (L−R for instrumental, mid channel for vocal guide) with a disclaimer.
+  * **Order decided 2026-11-01:** user import comes first (center-channel fallback + CREPE guide on the device), then the Track B spike; the Track A demo is a later safety net.
   * **Developer fallback:** a synthesized demo (sine melody as "vocal", simple chord pad as "instrumental", mix = sum) so the pipeline is testable before the Track A asset exists.
 * **Phase 2+:** better ML pitch models, AudioKit, etc. — see `docs/roadmap-akurasi.md`. All swaps happen behind the repository protocols in §6.3.
 

@@ -28,14 +28,12 @@ struct RootView: View {
                         onSaved: flow.vocalRangeSaved))
                 }
             case .importSong:
-                PlaceholderScreen(title: "Import Song", owner: "Ikzaz", backlogID: "IK-11",
-                                  actionTitle: "Use synthesized demo") {
+                ImportSongView(viewModel: makeImportViewModel()) {
                     Task { await flow.loadDemoSong() }
                 }
             case .ready:
-                PlaceholderScreen(title: "Ready", owner: "Ikzaz", backlogID: "IK-11",
-                                  detail: readyDetail, actionTitle: "Record") {
-                    flow.startRecording()
+                if let song = flow.preparedSong {
+                    ReadyView(song: song, onRecord: flow.startRecording, onChooseAnother: flow.startOver)
                 }
             case .recording:
                 PermissionGate([.camera, .microphone], provider: flow.container.permissions) {
@@ -89,10 +87,17 @@ struct RootView: View {
         }
     }
 
-    private var readyDetail: String? {
-        guard let song = flow.preparedSong else { return nil }
-        let shift = song.transposition.totalSemitones
-        return "\(song.segments.count) segments · \(shift >= 0 ? "+" : "")\(shift) semitones"
+    private func makeImportViewModel() -> ImportSongViewModel {
+        let container = flow.container
+        return ImportSongViewModel(
+            inspector: container.audioInspector,
+            prepare: PrepareSongUseCase(separation: container.stemSeparation,
+                                        analysis: container.audioAnalysis,
+                                        fallbackAnalysis: nil,
+                                        transposition: container.audioTransposition,
+                                        configuration: container.configuration),
+            vocalRange: { container.vocalRange.load() },
+            onPrepared: flow.songPrepared)
     }
 
     private func makeRecordingViewModel(song: PreparedSong) -> RecordingViewModel {
