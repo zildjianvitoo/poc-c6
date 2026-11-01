@@ -390,7 +390,7 @@ public protocol VideoCompositionRepository: Sendable {
 | `vocalGain` / `instrumentalGain` | 1.0 / 0.8 |
 | `manualLatencyCalibration` | 0 ms |
 | `maxSessionDuration` | 15 min |
-| `useCoreMLSeparation` | false (Track B flag) |
+| `useCoreMLSeparation` | true *(Track B "go" after the 2026-11-01 spike; center-channel is the automatic fallback)* |
 
 ---
 

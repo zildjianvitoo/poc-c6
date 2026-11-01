@@ -72,8 +72,8 @@ final class AppContainer {
         self.simulatedSinger = simulatedSinger
     }
 
-    /// What the app runs with: imported songs are prepared on the device (center-channel
-    /// separation, CREPE guide, offline transposition); recording and comping are real on a device.
+    /// What the app runs with: imported songs are prepared on the device (CoreML vocal separation
+    /// with a center-channel fallback, CREPE guide, offline transposition); recording and comping are real on a device.
     static func makeDefault() -> AppContainer {
         let demo = SynthesizedDemoRepository()
         let store = ConfigurationStore()
@@ -99,7 +99,10 @@ final class AppContainer {
         return AppContainer(
             configuration: store.load(),
             demo: demo,
-            stemSeparation: CenterChannelStemRepository(),
+            stemSeparation: SelectingStemSeparationRepository(
+                coreML: CoreMLStemSeparationRepository(),
+                centerChannel: CenterChannelStemRepository(),
+                useCoreML: { store.load().useCoreMLSeparation }),
             audioAnalysis: CrepeAnalysisRepository(),
             audioTransposition: AudioTranspositionRepositoryImpl(),
             vocalRange: VocalRangeRepositoryImpl(),

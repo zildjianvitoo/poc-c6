@@ -52,8 +52,8 @@ poc-c6/Resources/         stem lagu demo, guide, BasicPitch.mlpackage
 | 🟡 IK-11 | `AudioImportView` + `PrepViewModel`: Files/Photos/Demo, waveform trimmer 15–60 s, disclaimer Phase 1, layar Ready (jumlah segmen, transposisi) | P0 | M3 | IK-09 | Alur impor → Ready jalan di device |
 | ✅ IK-12 | Pesan error impor: DRM, format tidak didukung, tidak ada vokal terdeteksi (PRD §9) | P1 | M3 | IK-11 | Semua kasus §9 bagianmu punya pesan |
 | ✅ IK-13 | `CenterChannelStemRepository` (fallback L−R / mid) + disclaimer tambahan | P1 | M3 | — | Lagu import tanpa CoreML tetap bisa diproses |
-| IK-14 | **Spike Track B:** model separasi CoreML on-device (timebox 3–5 hari) | P1 | M4 | IK-05 | Laporan tertulis: model, ukuran, waktu proses 60 s, memori puncak, kualitas, go/no-go |
-| IK-15 | `CoreMLStemSeparationRepository` di balik flag `useCoreMLSeparation` | P2 | M4 | IK-14 = go | Bisa diaktifkan dari Debug Settings |
+| ✅ IK-14 | **Spike Track B:** model separasi CoreML on-device (timebox 3–5 hari) | P1 | M4 | IK-05 | Laporan tertulis: model, ukuran, waktu proses 60 s, memori puncak, kualitas, go/no-go |
+| 🟡 IK-15 | `CoreMLStemSeparationRepository` di balik flag `useCoreMLSeparation` | P2 | M4 | IK-14 = go | Bisa diaktifkan dari Debug Settings |
 
 ## Catatan
 - Note disimpan di **key asli**; transposisi hanya di `TranspositionPlan`.

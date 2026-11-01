@@ -127,7 +127,7 @@ struct ImportSongView: View {
                 Image(systemName: "flask")
             }
             Label {
-                Text("Background music uses basic vocal removal. Some original vocals may still be audible.")
+                Text("The singer is removed from the background music on your iPhone. Some original vocals may still be audible.")
             } icon: {
                 Image(systemName: "waveform.badge.minus")
             }

@@ -37,7 +37,8 @@ nonisolated struct PoCConfiguration: Sendable, Equatable, Codable {
     var instrumentalGain: Float = 0.8
 
     // Feature flags
-    var useCoreMLSeparation = false
+    /// Track B went "go" after the 2026-11-01 spike (see docs/test-reports/coreml-spike-2026-11-01.md).
+    var useCoreMLSeparation = true
 
     static let `default` = PoCConfiguration()
 }

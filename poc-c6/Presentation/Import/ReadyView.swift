@@ -32,8 +32,10 @@ struct ReadyView: View {
             .padding()
             .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
             previewButtons
-            if song.separationMethod == .centerChannelCancellation {
-                Text("Background music uses basic vocal removal. Some original vocals may still be audible.")
+            if song.separationMethod == .centerChannelCancellation || song.separationMethod == .coreML {
+                Text(song.separationMethod == .coreML
+                     ? "Background music was separated on your iPhone. Faint original vocals may remain."
+                     : "Background music uses basic vocal removal. Some original vocals may still be audible.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

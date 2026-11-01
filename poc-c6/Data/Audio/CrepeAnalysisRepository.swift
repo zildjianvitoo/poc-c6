@@ -73,24 +73,26 @@ nonisolated struct CrepeAnalysisRepository: AudioAnalysisRepository {
     private static func readMono(_ url: URL) throws -> (samples: [Float], rate: Double) {
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
-        let length = AVAudioFrameCount(file.length)
-        guard length > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: length) else {
+        let chunkSize: AVAudioFrameCount = 65_536
+        guard file.length > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunkSize) else {
             return ([], format.sampleRate)
         }
-        try file.read(into: buffer)
-        guard let channels = buffer.floatChannelData else { return ([], format.sampleRate) }
-        let count = Int(buffer.frameLength)
+        // AVAudioFile may return fewer frames than asked in one read (seen with mono WAV),
+        // so read until the end instead of trusting a single call.
         let channelCount = Int(format.channelCount)
-        if channelCount == 1 {
-            return (Array(UnsafeBufferPointer(start: channels[0], count: count)), format.sampleRate)
-        }
-        var mono = [Float](repeating: 0, count: count)
-        for channel in 0..<channelCount {
-            let data = channels[channel]
-            for i in 0..<count { mono[i] += data[i] }
-        }
         let scale = 1 / Float(channelCount)
-        for i in 0..<count { mono[i] *= scale }
+        var mono: [Float] = []
+        mono.reserveCapacity(Int(file.length))
+        while file.framePosition < file.length {
+            try file.read(into: buffer, frameCount: chunkSize)
+            guard buffer.frameLength > 0, let channels = buffer.floatChannelData else { break }
+            let count = Int(buffer.frameLength)
+            for i in 0..<count {
+                var sum: Float = 0
+                for channel in 0..<channelCount { sum += channels[channel][i] }
+                mono.append(sum * scale)
+            }
+        }
         return (mono, format.sampleRate)
     }
 }
