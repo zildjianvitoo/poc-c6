@@ -13,7 +13,7 @@ struct PitchGraph: View {
   var missedNotes: [String] = []
   private let purple = Color(red: 0.45, green: 0.33, blue: 0.93)
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+    TimelineView(.animation(minimumInterval: 1.0 / 60)) { timeline in
     Canvas { context, size in
       let left = 35.0
       let top = 10.0
