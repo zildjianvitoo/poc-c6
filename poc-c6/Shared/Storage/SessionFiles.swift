@@ -17,6 +17,13 @@ nonisolated enum SessionFiles {
     static var rawVideoURL: URL { directory.appendingPathComponent("RawMasterVideo.mov") }
     static var finalVideoURL: URL { directory.appendingPathComponent("FinalCoverVideo.mp4") }
 
+    /// Free space for important data on the app's volume, in bytes (PRD §5.8 storage checks).
+    static func availableCapacity() -> Int64 {
+        let values = try? URL(fileURLWithPath: NSHomeDirectory())
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage ?? 0
+    }
+
     /// Creates the session folder if needed.
     static func prepareDirectory() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

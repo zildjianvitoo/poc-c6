@@ -175,6 +175,7 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                 }
                 self.videoInput?.markAsFinished()
                 self.audioInput?.markAsFinished()
+                Self.deactivateAudioSession()
                 writer.finishWriting {
                     if writer.status == .completed { continuation.resume(returning: url) }
                     else { continuation.resume(throwing: writer.error ?? self.error("Video finalization failed.")) }

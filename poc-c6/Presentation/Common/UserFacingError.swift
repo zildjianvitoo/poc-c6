@@ -15,6 +15,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
     case speakerOutput
     case lowStorage(requiredGB: Double)
     case exportFailed(details: String)
+    case recordingFailed(details: String)
+    case recordingInterrupted
     case nothingToExport
 
     var title: String {
@@ -26,6 +28,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .speakerOutput: "Plug in earphones"
         case .lowStorage: "Not enough storage"
         case .exportFailed: "Export failed"
+        case .recordingFailed: "Recording stopped"
+        case .recordingInterrupted: "Recording was interrupted"
         case .nothingToExport: "Nothing to export yet"
         }
     }
@@ -45,6 +49,10 @@ nonisolated enum UserFacingError: Equatable, Sendable {
             "Free up at least \(requiredGB.formatted(.number.precision(.fractionLength(0...1)))) GB to record."
         case .exportFailed(let details):
             details
+        case .recordingFailed(let details):
+            details
+        case .recordingInterrupted:
+            "A call, another app or unplugged earphones stopped the session. Your passed segments are saved."
         case .nothingToExport:
             "Pass at least one segment to make a cover."
         }
@@ -58,6 +66,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .speakerOutput: "headphones"
         case .lowStorage: "externaldrive.badge.exclamationmark"
         case .exportFailed: "exclamationmark.triangle"
+        case .recordingFailed: "video.slash"
+        case .recordingInterrupted: "pause.circle"
         case .nothingToExport: "film.stack"
         }
     }

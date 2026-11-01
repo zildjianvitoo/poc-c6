@@ -50,7 +50,8 @@ nonisolated final class ReferencePlaybackRepositoryImpl: ReferencePlaybackReposi
         return CMTimeAdd(capture.captureTime(forHostTime: scheduled), CMTime(seconds: latency, preferredTimescale: 60000))
     }
 
-    func stop() { node.stop() }
+    /// Also stops the engine so the audio session can be released; `play` restarts it.
+    func stop() { node.stop(); engine.stop() }
     func shutdown() { node.stop(); engine.stop() }
     private func failure(_ message: String) -> NSError {
         NSError(domain: "Playback", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
