@@ -3,7 +3,7 @@
 //  poc-c6
 //
 
-#if DEBUG
+
 import Foundation
 
 nonisolated enum PreparationChecks {
@@ -59,4 +59,4 @@ nonisolated enum PreparationChecks {
         } catch is ContractViolation { }
     }
 }
-#endif
+

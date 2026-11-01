@@ -3,7 +3,7 @@
 //  poc-c6
 //
 
-#if DEBUG
+
 import Foundation
 
 /// Fixture-based checks runnable without a test target or changes to shared scripts.
@@ -86,4 +86,4 @@ nonisolated enum SliceSegmentsUseCaseChecks {
         return count
     }
 }
-#endif
+
