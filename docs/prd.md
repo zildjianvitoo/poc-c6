@@ -118,7 +118,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 ### 5.6 Evaluation & Loop
 * **Pitch frames:** every 50 ms; RMS noise gate −40 dBFS (below = unvoiced).
 * **Evaluated frames:** frames where a target note is active, **excluding the first 100 ms of each note** (attack). Frames with no target note are ignored.
-* **Hit:** user voiced AND `|Δcents| ≤ 50` against the target at time `t`, or any target note within ±100 ms of `t` (timing tolerance). $\Delta_{\text{cents}} = 100 \times (M_{\text{user}} - M_{\text{target}})$. A target-active frame where the user is silent is a **miss**.
+* **Hit:** user voiced AND `|Δcents| ≤ hitToleranceCents` (80, octave-folded) against the target at time `t`, or any target note within ±100 ms of `t` (timing tolerance). $\Delta_{\text{cents}} = 100 \times (M_{\text{user}} - M_{\text{target}})$. A target-active frame where the user is silent is a **miss**.
 * **Octaves are ignored** when comparing pitch (singing the melody an octave lower/higher is in tune), and the trail is drawn in the target's octave *(device feedback 2026-11-01)*.
 * **Score** = hits / **voiced** evaluated frames when the singer is voiced for ≥ 60% of the evaluated frames; otherwise hits / all evaluated frames (silence = miss). PASSED if ≥ 0.75. A segment with zero evaluated frames auto-passes. *(Changed 2026-11-01: on a real song the original singer is voiced only ~74% of the time, so "silence = miss" failed 73% of the original singer's own segments; with this rule and ±80¢ the original passes 100%, while singing 2 semitones off or not singing passes 0%.)*
 * **Missed note** (flashed red) = note whose own hit ratio < 50%.
@@ -377,7 +377,7 @@ public protocol VideoCompositionRepository: Sendable {
 | Key | Default |
 |---|---|
 | `passThreshold` | 0.75 |
-| `hitToleranceCents` | 50 |
+| `hitToleranceCents` | 80 *(was 50; changed 2026-11-01 after the real-song experiment)* |
 | `noiseGateDBFS` | −40 |
 | `pitchHop` | 0.05 s |
 | `attackIgnore` | 0.10 s |

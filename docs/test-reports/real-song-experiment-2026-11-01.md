@@ -24,5 +24,5 @@ Balok satu nada per frasa (dipisah jeda ≥ 0.4–0.8 s) membuat penyanyi asli h
 
 ## Keputusan / perubahan
 - `EvaluateSegmentUseCase`: skor = hit / frame bersuara jika bersuara ≥ 60%; selain itu diam dihitung miss (PRD §5.6 diperbarui).
-- Usulan: default `hitToleranceCents` 50 → 80 (perlu persetujuan karena `PoCConfiguration` adalah kontrak). Sementara bisa diatur lewat Debug Settings.
+- Default `hitToleranceCents` diubah 50 → 80 (disetujui Zildjian, 1 Nov).
 - Berikutnya: spike pemisahan vokal CoreML (IK-14).

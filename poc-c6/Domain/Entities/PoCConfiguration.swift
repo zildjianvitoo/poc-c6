@@ -11,7 +11,7 @@ import Foundation
 nonisolated struct PoCConfiguration: Sendable, Equatable, Codable {
     // Evaluation
     var passThreshold: Float = 0.75
-    var hitToleranceCents: Float = 50
+    var hitToleranceCents: Float = 80
     var noiseGateDBFS: Float = -40
     var pitchHop: TimeInterval = 0.05
     var attackIgnore: TimeInterval = 0.10
