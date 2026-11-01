@@ -1,0 +1,14 @@
+# setup.command installs Python 3.11 and a project-local FFmpeg binary.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+basic-pitch==0.4.0
+demucs==4.0.1
+torch==2.5.1
+torchaudio==2.5.1
+numpy<2
+soundfile>=0.12,<1
+faster-whisper>=1.1,<2
+imageio-ffmpeg>=0.6,<1
+
+# resampy 0.3.x imported by Basic Pitch requires pkg_resources.
+setuptools<81
