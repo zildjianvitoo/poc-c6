@@ -19,11 +19,11 @@ struct RootView: View {
             switch flow.step {
             case .vocalRange:
                 PermissionGate([.microphone], provider: flow.container.permissions) {
-                    PlaceholderScreen(title: "Vocal Range Test", owner: "Ikzaz", backlogID: "IK-10",
-                                      actionTitle: "Use sample range") {
-                        flow.container.vocalRange.save(VocalRange(lowestMIDI: 48, highestMIDI: 67))
-                        flow.vocalRangeSaved()
-                    }
+                    VocalRangeTestView(viewModel: VocalRangeViewModel(
+                        source: flow.container.livePitch,
+                        repository: flow.container.vocalRange,
+                        configuration: flow.container.configuration,
+                        onSaved: flow.vocalRangeSaved))
                 }
             case .importSong:
                 PlaceholderScreen(title: "Import Song", owner: "Ikzaz", backlogID: "IK-11",

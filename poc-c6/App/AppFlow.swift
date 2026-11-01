@@ -44,10 +44,15 @@ final class AppFlow {
         step = .ready
     }
 
-    /// Loads the synthesized demo song (ZV-06) and continues as if it was imported.
+    /// Loads the synthesized demo song (ZV-06), transposed to the user's vocal range (PRD §5.4),
+    /// and continues as if it was imported.
     func loadDemoSong() async {
         do {
-            songPrepared(try await container.demo.preparedSong())
+            let notes = container.demo.segments.flatMap(\.targetNotes)
+            let plan = try container.vocalRange.load().map {
+                try ComputeTranspositionUseCase().execute(notes: notes, vocalRange: $0)
+            } ?? .none
+            songPrepared(try await container.demo.preparedSong(transposition: plan))
         } catch {
             assertionFailure("Synthesized demo failed: \(error)")
         }

@@ -16,6 +16,8 @@ final class AppContainer {
     let audioAnalysis: any AudioAnalysisRepository
     let audioTransposition: any AudioTranspositionRepository
     let vocalRange: any VocalRangeRepository
+    /// Microphone pitch for the vocal range test.
+    let livePitch: any LivePitchSource
 
     // Takin
     let capture: any CaptureRepository
@@ -40,6 +42,7 @@ final class AppContainer {
          audioAnalysis: any AudioAnalysisRepository,
          audioTransposition: any AudioTranspositionRepository,
          vocalRange: any VocalRangeRepository,
+         livePitch: any LivePitchSource,
          capture: any CaptureRepository,
          referencePlayback: any ReferencePlaybackRepository,
          audioRoute: any AudioRouteMonitor,
@@ -54,6 +57,7 @@ final class AppContainer {
         self.audioAnalysis = audioAnalysis
         self.audioTransposition = audioTransposition
         self.vocalRange = vocalRange
+        self.livePitch = livePitch
         self.capture = capture
         self.referencePlayback = referencePlayback
         self.audioRoute = audioRoute
@@ -77,6 +81,7 @@ final class AppContainer {
         let playback: any ReferencePlaybackRepository = FakeReferencePlaybackRepository(latency: 0.12) { singer.playbackStarted(from: $0, heard: $1) }
         let audioRoute: any AudioRouteMonitor = FakeAudioRouteMonitor()
         let videoComposition: any VideoCompositionRepository = FakeVideoCompositionRepository()
+        let livePitch: any LivePitchSource = FakeLivePitchSource()
         #else
         let singer: SimulatedSinger? = nil
         let cameraCapture = CaptureRepositoryImpl()
@@ -85,6 +90,7 @@ final class AppContainer {
         let playback: any ReferencePlaybackRepository = ReferencePlaybackRepositoryImpl(capture: cameraCapture) { store.load() }
         let audioRoute: any AudioRouteMonitor = AudioRouteMonitorImpl()
         let videoComposition: any VideoCompositionRepository = VideoCompositionRepositoryImpl()
+        let livePitch: any LivePitchSource = MicrophonePitchSource()
         #endif
         return AppContainer(
             configuration: store.load(),
@@ -93,6 +99,7 @@ final class AppContainer {
             audioAnalysis: FakeAudioAnalysisRepository(),
             audioTransposition: FakeAudioTranspositionRepository(),
             vocalRange: VocalRangeRepositoryImpl(),
+            livePitch: livePitch,
             capture: capture,
             referencePlayback: playback,
             audioRoute: audioRoute,
@@ -113,6 +120,7 @@ final class AppContainer {
             audioAnalysis: FakeAudioAnalysisRepository(),
             audioTransposition: FakeAudioTranspositionRepository(),
             vocalRange: FakeVocalRangeRepository(initial: vocalRange),
+            livePitch: FakeLivePitchSource(),
             capture: FakeCaptureRepository(),
             referencePlayback: FakeReferencePlaybackRepository(),
             audioRoute: FakeAudioRouteMonitor(),

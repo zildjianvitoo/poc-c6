@@ -1,6 +1,6 @@
 # Checklist Tes iPhone — Fase 2
 
-Branch: `integration`. Lagu yang dipakai: **demo sintetis** (3 segmen, 16 detik: frasa 0–6 s, interlude instrumental 6–9 s, frasa 9–16 s). Notnya C4–G4 dan **tidak ditranspose**, jadi nyanyikan/senandungkan di nada itu (ikuti balok putih di piano roll). Nyanyi satu oktaf lebih rendah dihitung salah.
+Branch: `integration`. Lagu yang dipakai: **demo sintetis** (3 segmen, 16 detik: frasa 0–6 s, interlude instrumental 6–9 s, frasa 9–16 s). Notnya C4–G4, lalu **ditranspose otomatis sesuai hasil tes vocal range-mu** (langkah 1). Ikuti balok putih di piano roll; nyanyi satu oktaf berbeda dari balok dihitung salah.
 
 Yang dibutuhkan: iPhone (iOS 18+), kabel ke Mac, **earphone kabel** (Lightning/USB-C), AirPods (untuk tes Bluetooth), dan satu orang untuk menelepon (tes interupsi).
 
@@ -37,8 +37,12 @@ Isi kolom **Hasil** dengan ✅ / ❌ + catatan singkat. Kalau ❌, ambil screens
 |---|---|---|---|
 | 1.1 | Buka app pertama kali | Layar penjelasan izin mikrofon | |
 | 1.2 | Continue → Allow | Masuk layar Vocal Range | |
-| 1.3 | Use sample range → Use synthesized demo | Layar Ready: "3 segments · +0 semitones" | |
-| 1.4 | Record | Layar penjelasan izin kamera → Allow | |
+| 1.3 | **Vocal Range Test:** Start → nyanyikan "aaa" di nada **terendah** yang nyaman, tahan ±2 detik | Nama not berubah mengikuti suara, bar "Hold it…" penuh, lalu "Lowest note" + nama not | |
+| 1.4 | Next: Highest Note → nyanyikan nada **tertinggi** yang nyaman, tahan ±2 detik | "Your range" + rentang, mis. A2 – E4 | |
+| 1.5 | Coba Retry di salah satu langkah, dan coba nyanyi nada tinggi yang sama dengan nada rendah | Retry mengulang langkah itu; nada tinggi yang tidak lebih tinggi ditolak dengan pesan | |
+| 1.6 | Save and Continue → Use synthesized demo | Layar Ready: "3 segments · ±N semitones" — N bergantung range-mu (demo aslinya C4–G4) | |
+| 1.7 | Tutup app, buka lagi | Tes range tidak ditanya lagi (tersimpan); bisa diulang dari Debug Settings → Re-test Vocal Range | |
+| 1.8 | Record | Layar penjelasan izin kamera → Allow | |
 
 ## 2. Cek earphone (TK-13)
 

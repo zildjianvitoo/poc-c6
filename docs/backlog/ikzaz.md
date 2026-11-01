@@ -46,7 +46,7 @@ poc-c6/Resources/         stem lagu demo, guide, BasicPitch.mlpackage
 | IK-07 | `CrepeAnalysisRepository` (fallback, pakai `CrepePitchDetector` di vocal stem) | P1 | M3 | TK-03 | Dipakai otomatis kalau Basic Pitch gagal load atau 0 note |
 | IK-08 | `AudioTranspositionRepositoryImpl` (AVAudioEngine manual rendering + `AVAudioUnitTimePitch`) | P0 | M3 | — | Render ±1…6 semitone, durasi output = input, `semitones == 0` tidak render ulang |
 | IK-09 | `PrepareSongUseCase` (separate → extract → slice → transpose → render) + progress per langkah | P0 | M3 | IK-02, 03, 05, 06, 08 | Output lolos `validate()`; progress bisa ditampilkan di UI |
-| IK-10 | Vocal Range Test: `DetectVocalRangeUseCase`, `VocalRangeRepositoryImpl` (`UserDefaults`), `VocalRangeTestView` | P0 | M3 | TK-03 | Nada terendah & tertinggi tersimpan; bisa tes ulang |
+| 🟡 IK-10 | Vocal Range Test: `DetectVocalRangeUseCase`, `VocalRangeRepositoryImpl` (`UserDefaults`), `VocalRangeTestView` | P0 | M3 | TK-03 | Nada terendah & tertinggi tersimpan; bisa tes ulang |
 | IK-11 | `AudioImportView` + `PrepViewModel`: Files/Photos/Demo, waveform trimmer 15–60 s, disclaimer Phase 1, layar Ready (jumlah segmen, transposisi) | P0 | M3 | IK-09 | Alur impor → Ready jalan di device |
 | IK-12 | Pesan error impor: DRM, format tidak didukung, tidak ada vokal terdeteksi (PRD §9) | P1 | M3 | IK-11 | Semua kasus §9 bagianmu punya pesan |
 | IK-13 | `CenterChannelStemRepository` (fallback L−R / mid) + disclaimer tambahan | P1 | M3 | — | Lagu import tanpa CoreML tetap bisa diproses |

@@ -10,6 +10,7 @@ import Foundation
 let suites: [(name: String, run: () async throws -> Int?)] = [
     ("SliceSegmentsUseCase", SliceSegmentsUseCaseChecks.run),
     ("ComputeTranspositionUseCase", ComputeTranspositionUseCaseChecks.run),
+    ("DetectVocalRangeUseCase", DetectVocalRangeUseCaseChecks.run),
     ("PrepareSongUseCase", { try await PreparationChecks.run(); return nil }),
     ("EvaluateSegmentUseCase", EvaluateSegmentUseCaseChecks.run),
     ("LoopStateController", LoopStateControllerChecks.run),
