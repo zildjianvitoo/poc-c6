@@ -7,7 +7,7 @@ ROOT="${0:A:h:h}"
 OUT="$(mktemp -d)/contract-check"
 
 xcrun swiftc -D DEBUG \
-  $(find "$ROOT/poc-c6/Domain" -name '*.swift') \
+  "${(@f)$(find "$ROOT/poc-c6/Domain/Entities" "$ROOT/poc-c6/Domain/Repositories" "$ROOT/poc-c6/Domain/Contracts" -name '*.swift')}" \
   "$ROOT/scripts/contract-check/main.swift" \
   -o "$OUT"
 
