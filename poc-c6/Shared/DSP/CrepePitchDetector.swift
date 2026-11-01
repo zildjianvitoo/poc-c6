@@ -25,7 +25,9 @@ nonisolated final class CrepePitchDetector {
         userInfo: [NSLocalizedDescriptionKey: "CREPE model not found in the app bundle."])
     }
     let config = MLModelConfiguration()
-    config.computeUnits = .cpuOnly
+    // Neural Engine first: during recording the CPU is also encoding video and drawing the piano
+    // roll, and running CREPE there 20× per second made playback crackle under load.
+    config.computeUnits = .cpuAndNeuralEngine
     model = try MLModel(contentsOf: url, configuration: config)
   }
   func detect(_ samples: [Float], sampleRate: Double) throws -> Double? {

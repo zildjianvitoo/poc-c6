@@ -28,9 +28,11 @@ struct PianoRollView: View {
     /// Notes of the current segment, used to fit the vertical range.
     let focusMIDI: [Int]
     let songTime: () -> TimeInterval?
+    /// Stops redrawing (e.g. while a dialog is open) to leave CPU time for audio and video.
+    var isPaused = false
 
     var body: some View {
-        TimelineView(.animation) { _ in
+        TimelineView(.animation(minimumInterval: nil, paused: isPaused)) { _ in
             Canvas { context, size in
                 draw(in: &context, size: size, now: songTime())
             }

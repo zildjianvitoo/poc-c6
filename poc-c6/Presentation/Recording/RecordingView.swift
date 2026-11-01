@@ -114,7 +114,8 @@ struct RecordingView: View {
             PianoRollView(notes: pianoRollNotes,
                           trail: viewModel.trail,
                           focusMIDI: focusMIDI,
-                          songTime: viewModel.displaySongTime)
+                          songTime: viewModel.displaySongTime,
+                          isPaused: confirmsEnd)
                 .frame(height: 180)
                 .padding(.horizontal)
             phaseInfo
