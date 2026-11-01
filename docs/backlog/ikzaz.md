@@ -32,12 +32,14 @@ poc-c6/Resources/         stem lagu demo, guide, BasicPitch.mlpackage
 
 ## Backlog
 
+> **Status 1 Nov 2026 (takeover, branch `integration`):** ✅ = selesai di kode dan lolos cek Mac/simulator. 🟡 = kode selesai, menunggu tes di iPhone fisik.
+
 | ID | Task | Prio | Milestone | Tergantung | Selesai kalau |
 |---|---|---|---|---|---|
 | IK-01 | Review & setujui kontrak Domain bersama tim | P0 | M1 | — | PR kontrak di-approve 3 orang |
-| IK-02 | `SliceSegmentsUseCase` (PRD §5.3: gap > 0.8 s, gabung < 3 s, pecah > 8 s, segmen menutup timeline, segmen tanpa note) | P0 | M2 | IK-01 | Hasilnya lolos `PreparedSong.validate()` untuk minimal 5 kasus: normal, tanpa jeda, banyak jeda pendek, intro instrumental, frase > 8 s |
-| IK-02b | Perbaikan IK-02 dari audit 1 Nov (`docs/test-reports/audit-tim-2026-11-01.md` I-3…I-6): jarak 0.4 s di sekitar intro/interlude/outro panjang (PRD §5.3 aturan 4), toleransi 1 ms untuk jeda/overlap/akhir lagu, clamp note dari analisis, titik potong yang menjaga kedua sisi ≥ 3 s | P0 | M2 | IK-02 | Tidak ada batas segmen tepat di tepi note; output Basic Pitch dengan overlap 1 ms tidak error; frase 9.7 s tidak menghasilkan segmen < 3 s |
-| IK-03 | `ComputeTranspositionUseCase` (PRD §5.4) | P0 | M2 | IK-01 | Cowok vs lagu cewek → `octaveShift = -1`; range pas → shift 0; `semitoneShift` selalu dalam −6…6 |
+| ✅ IK-02 | `SliceSegmentsUseCase` (PRD §5.3: gap > 0.8 s, gabung < 3 s, pecah > 8 s, segmen menutup timeline, segmen tanpa note) | P0 | M2 | IK-01 | Hasilnya lolos `PreparedSong.validate()` untuk minimal 5 kasus: normal, tanpa jeda, banyak jeda pendek, intro instrumental, frase > 8 s |
+| ✅ IK-02b | Perbaikan IK-02 dari audit 1 Nov (`docs/test-reports/audit-tim-2026-11-01.md` I-3…I-6): jarak 0.4 s di sekitar intro/interlude/outro panjang (PRD §5.3 aturan 4), toleransi 1 ms untuk jeda/overlap/akhir lagu, clamp note dari analisis, titik potong yang menjaga kedua sisi ≥ 3 s | P0 | M2 | IK-02 | Tidak ada batas segmen tepat di tepi note; output Basic Pitch dengan overlap 1 ms tidak error; frase 9.7 s tidak menghasilkan segmen < 3 s |
+| ✅ IK-03 | `ComputeTranspositionUseCase` (PRD §5.4) | P0 | M2 | IK-01 | Cowok vs lagu cewek → `octaveShift = -1`; range pas → shift 0; `semitoneShift` selalu dalam −6…6 |
 | IK-04 | Siapkan lagu demo Track A: pilih lagu royalty-free, pisah stem di Mac (mis. Demucs), trim 15–60 s, export `mix`, `vocal`, `instrumental` | P0 | M3 | — | 3 file di `Resources/`, durasi persis sama, terdengar bersih |
 | IK-05 | `BundledStemsRepository` (Track A) | P0 | M3 | IK-04 | Mengembalikan `SeparatedStems` dari Resources |
 | IK-06 | `BasicPitchAnalysisRepository`: cek lisensi + ekspor CoreML Basic Pitch, inference di vocal stem, reduksi monofonik (PRD §5.3) | P0 | M3 | IK-04 | Guide lagu demo cocok saat didengar/dibandingkan manual; hasil disimpan juga sebagai `demo_guide.json` |
