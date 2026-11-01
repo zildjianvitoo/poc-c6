@@ -28,6 +28,8 @@ Kenapa ini membuat struktur data tetap sama:
 
 ## 2. Siapa memiliki apa
 
+> **Update 1 Nov 2026:** atas kesepakatan tim, Zildjian mengambil alih seluruh sisa backlog Ikzaz dan Takin. Semua pekerjaan lanjutan dilakukan di branch **`integration`** (dibuat dari `main`), yang juga menampung kode dari branch `ikzaz` dan `takin`. Tabel di bawah tetap menunjukkan pembagian awal; untuk perubahan baru, Zildjian adalah pemilik semua folder.
+
 | Folder | Pemilik | Boleh diubah orang lain? |
 |---|---|---|
 | `Domain/Entities`, `Domain/Repositories`, `Domain/Contracts` | **Semua (kontrak)** | Hanya lewat proses §3 |
@@ -109,6 +111,7 @@ git config core.hooksPath .githooks
 |---|---|
 | Ikzaz | `ikzaz` |
 | Takin | `takin` |
+| Zildjian (takeover, mulai 1 Nov) | `integration` |
 | Zildjian | `zildjian` |
 
 **Mulai kerja (sekali):**

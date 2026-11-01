@@ -41,7 +41,7 @@ Ignore `docs/archive/` (outdated PRD) and `docs/review-*.md` (discussion notes; 
 - At handoff points, call the contract checks (`validate()` / `Contract.assertValid`), see `docs/COLLABORATION.md` §4.
 
 ## Branches
-- **Never commit or push to `main`.** Each person works on their own branch: `ikzaz`, `takin`, `zildjian`. Before making changes, check the current branch (`git branch --show-current`); if it is `main`, stop and ask the user to switch.
+- **Never commit or push to `main`.** Each person works on their own branch: `ikzaz`, `takin`, `zildjian`. Since 2026-11-01 Zildjian has taken over all remaining backlog items; that work happens on the `integration` branch. Before making changes, check the current branch (`git branch --show-current`); if it is `main`, stop and ask the user to switch.
 - Contract changes go on a short `contract/<topic>` branch instead (see `docs/COLLABORATION.md` §3).
 - Never force-push. Bring in `main` with `git merge origin/main`, not rebase.
 
