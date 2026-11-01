@@ -11,6 +11,7 @@ let suites: [(name: String, run: () async throws -> Int?)] = [
     ("SliceSegmentsUseCase", SliceSegmentsUseCaseChecks.run),
     ("ComputeTranspositionUseCase", ComputeTranspositionUseCaseChecks.run),
     ("DetectVocalRangeUseCase", DetectVocalRangeUseCaseChecks.run),
+    ("ExtractGuideNotesUseCase", ExtractGuideNotesUseCaseChecks.run),
     ("PrepareSongUseCase", { try await PreparationChecks.run(); return nil }),
     ("EvaluateSegmentUseCase", EvaluateSegmentUseCaseChecks.run),
     ("LoopStateController", LoopStateControllerChecks.run),
