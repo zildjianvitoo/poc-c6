@@ -1,0 +1,8 @@
+.DS_Store
+Service/.venv/
+Service/jobs/
+**/__pycache__/
+*.xcuserstate
+xcuserdata/
+Service/.python/
+Service/.setup-tools/
