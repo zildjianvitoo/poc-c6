@@ -55,7 +55,8 @@ final class AppFlow {
 
     /// Ready screen: user tapped Record. A new session starts, so files from the last one go (ZV-16).
     func startRecording() {
-        guard preparedSong != nil else { return }
+        guard let preparedSong else { return }
+        container.simulatedSinger?.prepare(song: preparedSong)
         container.takeLog.clear()
         SessionFiles.cleanUp()
         try? SessionFiles.prepareDirectory()

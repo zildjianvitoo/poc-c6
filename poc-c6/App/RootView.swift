@@ -37,9 +37,8 @@ struct RootView: View {
                 }
             case .recording:
                 PermissionGate([.camera, .microphone], provider: flow.container.permissions) {
-                    PlaceholderScreen(title: "Recording", owner: "Takin", backlogID: "TK-10, TK-11",
-                                      actionTitle: "Simulate session (2 of 3 passed)") {
-                        flow.sessionEnded(with: DomainFixtures.compingPlan(configuration: flow.container.configuration))
+                    if let song = flow.preparedSong {
+                        RecordingView(viewModel: makeRecordingViewModel(song: song))
                     }
                 }
             case .export:
@@ -52,11 +51,14 @@ struct RootView: View {
         .animation(.default, value: flow.step)
         .overlay(alignment: .topTrailing) {
             #if DEBUG
-            Button("Debug Settings", systemImage: "slider.horizontal.3") {
-                showsDebugSettings = true
+            // Hidden while recording: the top bar's End Session button lives there.
+            if flow.step != .recording {
+                Button("Debug Settings", systemImage: "slider.horizontal.3") {
+                    showsDebugSettings = true
+                }
+                .labelStyle(.iconOnly)
+                .padding()
             }
-            .labelStyle(.iconOnly)
-            .padding()
             #endif
         }
         .sheet(isPresented: $showsDebugSettings) {
@@ -70,6 +72,20 @@ struct RootView: View {
         guard let song = flow.preparedSong else { return nil }
         let shift = song.transposition.totalSemitones
         return "\(song.segments.count) segments · \(shift >= 0 ? "+" : "")\(shift) semitones"
+    }
+
+    private func makeRecordingViewModel(song: PreparedSong) -> RecordingViewModel {
+        let container = flow.container
+        return RecordingViewModel(
+            song: song,
+            capture: container.capture,
+            playback: container.referencePlayback,
+            routeMonitor: container.audioRoute,
+            takeLog: container.takeLog,
+            planner: AutoCompingVideoUseCase(takeLog: container.takeLog, videoComposition: container.videoComposition),
+            configuration: container.configuration,
+            onFinish: flow.sessionEnded,
+            onDiscard: flow.sessionDiscarded)
     }
 
     private func makeCompingViewModel(plan: CompingCompositionPlan) -> CompingViewModel {

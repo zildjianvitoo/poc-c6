@@ -14,10 +14,13 @@ import Synchronization
 /// (the same clock FakeCaptureRepository uses).
 nonisolated final class FakeReferencePlaybackRepository: ReferencePlaybackRepository, Sendable {
     let latency: TimeInterval
+    /// Called with (referenceTime, heard capture time) on every play, e.g. by SimulatedSinger.
+    let onPlay: (@Sendable (TimeInterval, CMTime) -> Void)?
     private let loadedURL = Mutex<URL?>(nil)
 
-    init(latency: TimeInterval = 0) {
+    init(latency: TimeInterval = 0, onPlay: (@Sendable (TimeInterval, CMTime) -> Void)? = nil) {
         self.latency = latency
+        self.onPlay = onPlay
     }
 
     func load(earphoneMixURL: URL) throws {
@@ -25,7 +28,9 @@ nonisolated final class FakeReferencePlaybackRepository: ReferencePlaybackReposi
     }
 
     func play(from referenceTime: TimeInterval) throws -> CMTime {
-        CMClockGetTime(CMClockGetHostTimeClock()) + CMTime(seconds: latency, preferredTimescale: 600)
+        let heard = CMClockGetTime(CMClockGetHostTimeClock()) + CMTime(seconds: latency, preferredTimescale: 600)
+        onPlay?(referenceTime, heard)
+        return heard
     }
 
     func stop() {}

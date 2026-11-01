@@ -31,6 +31,8 @@ final class AppContainer {
     let videoLibrary: any VideoLibrarySaving
     /// Camera and microphone permissions for PermissionGate (ZV-14).
     let permissions: any MediaPermissionProviding
+    /// Simulator only: sings along with the fake playback so the recording loop can run.
+    let simulatedSinger: SimulatedSinger?
 
     init(configuration: PoCConfiguration,
          demo: SynthesizedDemoRepository,
@@ -44,7 +46,8 @@ final class AppContainer {
          takeLog: any SessionTakeLogRepository,
          videoComposition: any VideoCompositionRepository,
          videoLibrary: any VideoLibrarySaving,
-         permissions: any MediaPermissionProviding) {
+         permissions: any MediaPermissionProviding,
+         simulatedSinger: SimulatedSinger? = nil) {
         self.configuration = configuration
         self.demo = demo
         self.stemSeparation = stemSeparation
@@ -58,25 +61,46 @@ final class AppContainer {
         self.videoComposition = videoComposition
         self.videoLibrary = videoLibrary
         self.permissions = permissions
+        self.simulatedSinger = simulatedSinger
     }
 
-    /// What the app runs with. Fakes for now; swap each line as real implementations land.
+    /// What the app runs with. Song preparation still uses the synthesized demo and fakes
+    /// until the M3 pipeline lands; recording and comping are real on a device.
     static func makeDefault() -> AppContainer {
         let demo = SynthesizedDemoRepository()
+        let store = ConfigurationStore()
+        #if targetEnvironment(simulator)
+        // No camera or microphone: a simulated singer drives the real recording loop.
+        // 0.12 s ≈ the device's scheduling lead + output latency.
+        let singer = SimulatedSinger()
+        let capture: any CaptureRepository = FakeCaptureRepository { _ in singer.frequencyNow() }
+        let playback: any ReferencePlaybackRepository = FakeReferencePlaybackRepository(latency: 0.12) { singer.playbackStarted(from: $0, heard: $1) }
+        let audioRoute: any AudioRouteMonitor = FakeAudioRouteMonitor()
+        let videoComposition: any VideoCompositionRepository = FakeVideoCompositionRepository()
+        #else
+        let singer: SimulatedSinger? = nil
+        let cameraCapture = CaptureRepositoryImpl()
+        let capture: any CaptureRepository = cameraCapture
+        // Read on every play so Debug Settings (manual latency) apply immediately.
+        let playback: any ReferencePlaybackRepository = ReferencePlaybackRepositoryImpl(capture: cameraCapture) { store.load() }
+        let audioRoute: any AudioRouteMonitor = AudioRouteMonitorImpl()
+        let videoComposition: any VideoCompositionRepository = VideoCompositionRepositoryImpl()
+        #endif
         return AppContainer(
-            configuration: ConfigurationStore().load(),
+            configuration: store.load(),
             demo: demo,
             stemSeparation: demo,
             audioAnalysis: FakeAudioAnalysisRepository(),
             audioTransposition: FakeAudioTranspositionRepository(),
-            vocalRange: FakeVocalRangeRepository(),
-            capture: FakeCaptureRepository(),
-            referencePlayback: FakeReferencePlaybackRepository(),
-            audioRoute: FakeAudioRouteMonitor(),
-            takeLog: FakeSessionTakeLogRepository(),
-            videoComposition: FakeVideoCompositionRepository(),
+            vocalRange: VocalRangeRepositoryImpl(),
+            capture: capture,
+            referencePlayback: playback,
+            audioRoute: audioRoute,
+            takeLog: SessionTakeLogRepositoryImpl(),
+            videoComposition: videoComposition,
             videoLibrary: PhotoLibraryVideoSaver(),
-            permissions: SystemMediaPermissions()
+            permissions: SystemMediaPermissions(),
+            simulatedSinger: singer
         )
     }
 
