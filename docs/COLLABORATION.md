@@ -90,7 +90,7 @@ Cek kontrak di Mac tanpa simulator:
 | `PreparedSong` dari Ikzaz | `DomainFixtures.preparedSong` → lalu demo sintetis Zildjian (ZV-06) |
 | Take LOLOS dari Takin | `DomainFixtures.compingPlan()` |
 | Implementasi protocol orang lain | Fakes di `poc-c6/Fakes/` (ZV-03), dipilih lewat `AppContainer` |
-| `YINPitchDetector` dari Takin | Tunggu TK-03 (dikerjakan paling awal) |
+| `CrepePitchDetector` dari Takin | Sudah ada di branch `takin` (TK-03); pakai setelah di-merge ke `main` |
 
 ---
 
