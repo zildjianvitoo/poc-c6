@@ -10,9 +10,13 @@ import SwiftUI
 struct ReadyView: View {
     let song: PreparedSong
     let previewer: any AudioPreviewing
+    let routeMonitor: any AudioRouteMonitor
+    /// Debug speaker test (DebugOptions) lets Record through without earphones.
+    var allowsSpeaker = false
     let onRecord: () -> Void
     let onChooseAnother: () -> Void
     @State private var playing: Track?
+    @State private var route: AudioOutputRoute?
 
     enum Track { case instrumental, original }
 
@@ -40,8 +44,11 @@ struct ReadyView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
-            Label("Use earphones so the song doesn't leak into the microphone.", systemImage: "headphones")
+            Label(canRecord ? "Use earphones so the song doesn't leak into the microphone."
+                            : "Plug in earphones to record.",
+                  systemImage: "headphones")
                 .font(.footnote)
+                .foregroundStyle(canRecord ? Color.primary : Color.orange)
             Spacer()
             Button("Record") {
                 previewer.stop()
@@ -49,6 +56,7 @@ struct ReadyView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .disabled(!canRecord)
             Button("Choose Another Song") {
                 previewer.stop()
                 onChooseAnother()
@@ -56,6 +64,15 @@ struct ReadyView: View {
         }
         .padding()
         .onDisappear { previewer.stop() }
+        .task {
+            route = routeMonitor.currentRoute
+            for await change in routeMonitor.routeChanges() { route = change }
+        }
+    }
+
+    /// PRD §5.2 step 3: Record is disabled on the built-in speaker/receiver.
+    private var canRecord: Bool {
+        allowsSpeaker || (route ?? routeMonitor.currentRoute).allowsRecording
     }
 
     /// Listen to the background music alone (what ends up in the cover) or the original.

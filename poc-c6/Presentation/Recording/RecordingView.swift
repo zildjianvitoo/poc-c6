@@ -118,6 +118,7 @@ struct RecordingView: View {
                           trail: viewModel.trail,
                           focusMIDI: focusMIDI,
                           songTime: viewModel.displaySongTime,
+                          dimmedBefore: viewModel.loop.phase == .preRoll ? viewModel.loop.currentSegment?.audioStartTime : nil,
                           isPaused: confirmsEnd)
                 .frame(height: 180)
                 .padding(.horizontal)

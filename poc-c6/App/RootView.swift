@@ -34,6 +34,8 @@ struct RootView: View {
             case .ready:
                 if let song = flow.preparedSong {
                     ReadyView(song: song, previewer: flow.container.audioPreview,
+                              routeMonitor: flow.container.audioRoute,
+                              allowsSpeaker: DebugOptions.allowsSpeakerRecording,
                               onRecord: flow.startRecording, onChooseAnother: flow.startOver)
                 }
             case .recording:

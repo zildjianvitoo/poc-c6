@@ -28,6 +28,8 @@ struct PianoRollView: View {
     /// Notes of the current segment, used to fit the vertical range.
     let focusMIDI: [Int]
     let songTime: () -> TimeInterval?
+    /// PRD §5.5: during pre-roll, notes before this time (previous material) are drawn greyed out.
+    var dimmedBefore: TimeInterval?
     /// Stops redrawing (e.g. while a dialog is open) to leave CPU time for audio and video.
     var isPaused = false
 
@@ -84,7 +86,9 @@ struct PianoRollView: View {
         for note in notes where note.end > windowStart && note.start < windowEnd && range.contains(note.midi) {
             let rect = CGRect(x: x(note.start), y: y(Double(note.midi)) - rowHeight * 0.4,
                               width: max(2, x(note.end) - x(note.start)), height: rowHeight * 0.8)
-            let color: Color = note.isMissed ? .red : (note.start <= current && current < note.end ? .white : .white.opacity(0.6))
+            let isPrevious = dimmedBefore.map { note.end <= $0 + 1e-6 } ?? false
+            let color: Color = note.isMissed ? .red : isPrevious ? .gray.opacity(0.45)
+                : (note.start <= current && current < note.end ? .white : .white.opacity(0.6))
             context.fill(Path(roundedRect: rect, cornerRadius: min(4, rowHeight * 0.3)), with: .color(color.opacity(0.85)))
         }
 
