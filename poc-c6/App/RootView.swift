@@ -84,6 +84,7 @@ struct RootView: View {
             takeLog: container.takeLog,
             planner: AutoCompingVideoUseCase(takeLog: container.takeLog, videoComposition: container.videoComposition),
             configuration: container.configuration,
+            allowsSpeaker: DebugOptions.allowsSpeakerRecording,
             onFinish: flow.sessionEnded,
             onDiscard: flow.sessionDiscarded)
     }

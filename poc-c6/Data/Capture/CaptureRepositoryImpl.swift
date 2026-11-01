@@ -111,9 +111,13 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
     }
 
     /// PRD §7.2: play-and-record for video, A2DP only (no HFP, no speaker default), built-in mic always.
+    /// The debug speaker test adds `.defaultToSpeaker`; otherwise audio without earphones would go
+    /// to the quiet receiver.
     private static func activateAudioSession() throws {
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP])
+        var options: AVAudioSession.CategoryOptions = [.allowBluetoothA2DP]
+        if DebugOptions.allowsSpeakerRecording { options.insert(.defaultToSpeaker) }
+        try audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: options)
         try audioSession.setPreferredSampleRate(audioSampleRate)
         try audioSession.setActive(true)
         if let mic = audioSession.availableInputs?.first(where: { $0.portType == .builtInMic }) {

@@ -66,6 +66,7 @@ final class RecordingViewModel {
     @ObservationIgnored private let configuration: PoCConfiguration
     @ObservationIgnored private let onFinish: (CompingCompositionPlan) -> Void
     @ObservationIgnored private let onDiscard: () -> Void
+    @ObservationIgnored private let allowsSpeaker: Bool
 
     /// Capture-clock time at which song time 0 is heard. Set on every playback start.
     @ObservationIgnored private var anchor: CMTime?
@@ -84,6 +85,7 @@ final class RecordingViewModel {
          takeLog: any SessionTakeLogRepository,
          planner: AutoCompingVideoUseCase,
          configuration: PoCConfiguration,
+         allowsSpeaker: Bool = false,
          onFinish: @escaping (CompingCompositionPlan) -> Void,
          onDiscard: @escaping () -> Void) {
         self.song = song
@@ -95,6 +97,7 @@ final class RecordingViewModel {
         self.configuration = configuration
         self.onFinish = onFinish
         self.onDiscard = onDiscard
+        self.allowsSpeaker = allowsSpeaker
         loop = LoopStateController(segments: song.segments, configuration: configuration)
         route = routeMonitor.currentRoute
     }
@@ -105,6 +108,8 @@ final class RecordingViewModel {
     var segmentCount: Int { song.segments.count }
     var passedCount: Int { loop.passedCount }
     var showsBluetoothWarning: Bool { route == .bluetooth }
+    /// Debug speaker test: recording on the loudspeaker is allowed and flagged on screen.
+    var isSpeakerTest: Bool { route == .speaker && allowsSpeaker }
 
     /// "Segment 3 / 7 · Attempt 2" (index + 1 for display).
     var progressTitle: String {
@@ -134,7 +139,7 @@ final class RecordingViewModel {
         guard status == .starting || isBlocked else { return }
         status = .starting
         route = routeMonitor.currentRoute
-        guard route.allowsRecording else {
+        guard route.allowsRecording || allowsSpeaker else {
             status = .blocked(.speakerOutput)
             return
         }
@@ -332,7 +337,7 @@ final class RecordingViewModel {
             for await route in routes {
                 guard let self else { return }
                 self.route = route
-                if !route.allowsRecording { await self.interrupt() }
+                if !route.allowsRecording && !self.allowsSpeaker { await self.interrupt() }
             }
         })
         tasks.append(Task { [weak self] in

@@ -95,6 +95,13 @@ struct RecordingView: View {
     private var recordingOverlay: some View {
         VStack(spacing: 12) {
             topBar
+            if viewModel.isSpeakerTest {
+                Label("Speaker test mode: scores are not reliable", systemImage: "speaker.wave.3")
+                    .font(.footnote)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.purple.opacity(0.85), in: .capsule)
+            }
             if viewModel.showsBluetoothWarning {
                 Label("Wired earphones give the best sync", systemImage: "airpodspro")
                     .font(.footnote)

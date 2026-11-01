@@ -10,6 +10,7 @@ import SwiftUI
 struct DebugSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var configuration: PoCConfiguration
+    @State private var allowsSpeakerRecording = DebugOptions.allowsSpeakerRecording
     private let onSave: (PoCConfiguration) -> Void
     private let onRetestVocalRange: () -> Void
 
@@ -60,6 +61,13 @@ struct DebugSettingsView: View {
                     Toggle("CoreML stem separation (Track B)", isOn: $configuration.useCoreMLSeparation)
                 }
                 Section {
+                    Toggle("Allow recording without earphones", isOn: $allowsSpeakerRecording)
+                } header: {
+                    Text("Device testing")
+                } footer: {
+                    Text("Plays the song through the loudspeaker. The song leaks into the microphone, so scores and the final mix are not representative. Debug builds only.")
+                }
+                Section {
                     Button("Re-test Vocal Range") {
                         onRetestVocalRange()
                         dismiss()
@@ -78,6 +86,7 @@ struct DebugSettingsView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
+                        DebugOptions.allowsSpeakerRecording = allowsSpeakerRecording
                         onSave(configuration)
                         dismiss()
                     }
