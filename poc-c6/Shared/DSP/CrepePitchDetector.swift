@@ -2,19 +2,27 @@
 //  CrepePitchDetector.swift
 //  poc-c6
 //
+//  CREPE tiny (CoreML) pitch estimate for one audio window. Used for live pitch,
+//  the vocal range test and the guide fallback (PRD §2, team decision 2026-11-01).
+//
 
 import AVFoundation
 import CoreML
 import Foundation
 
 nonisolated final class CrepePitchDetector {
+  /// CREPE's own voicing threshold on the salience peak (model-specific, PRD §2).
+  static let confidenceThreshold = 0.5
+  /// Windows quieter than this skip inference. The configurable noise gate is applied later
+  /// in TrackLivePitchUseCase; this only saves work on near-silence (−60 dBFS).
+  static let minimumRMS = 0.001
   private let model: MLModel
   init(modelURL: URL? = nil) throws {
     guard let url = modelURL ?? Bundle.main.url(forResource: "CrepeTiny", withExtension: "mlmodelc")
     else {
       throw NSError(
         domain: "CREPE", code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "Model CREPE tidak ditemukan."])
+        userInfo: [NSLocalizedDescriptionKey: "CREPE model not found in the app bundle."])
     }
     let config = MLModelConfiguration()
     config.computeUnits = .cpuOnly
@@ -39,7 +47,7 @@ nonisolated final class CrepePitchDetector {
     else {
       throw NSError(
         domain: "CREPE", code: 2,
-        userInfo: [NSLocalizedDescriptionKey: "Format audio CREPE tidak didukung."])
+        userInfo: [NSLocalizedDescriptionKey: "Unsupported audio format for CREPE."])
     }
     source.frameLength = AVAudioFrameCount(samples.count)
     samples.withUnsafeBufferPointer {
@@ -68,10 +76,7 @@ nonisolated final class CrepePitchDetector {
     var estimate = CrepeEstimate()
     estimate.rms = deviation
     estimate.centerOffset = Double(offset + 512) / 16000
-    guard deviation > PracticeConfiguration.minimumRMS else {
-      estimate.reason = "Suara terlalu pelan"
-      return estimate
-    }
+    guard deviation > Self.minimumRMS else { return estimate }
     let input = try MLMultiArray(shape: [1, 1024], dataType: .float32)
     for i in 0..<1024 { input[i] = NSNumber(value: Float((frame[i] - mean) / deviation)) }
     let features = try MLDictionaryFeatureProvider(dictionary: [
@@ -83,15 +88,12 @@ nonisolated final class CrepePitchDetector {
     else {
       throw NSError(
         domain: "CREPE", code: 3,
-        userInfo: [NSLocalizedDescriptionKey: "Output model CREPE tidak valid."])
+        userInfo: [NSLocalizedDescriptionKey: "Unexpected CREPE model output."])
     }
     let values = (0..<360).map { salience[$0].doubleValue }
     guard let peak = values.indices.max(by: { values[$0] < values[$1] }) else { return estimate }
     estimate.confidence = values[peak]
-    guard values[peak] >= PracticeConfiguration.crepeConfidence else {
-      estimate.reason = "CREPE belum yakin"
-      return estimate
-    }
+    guard values[peak] >= Self.confidenceThreshold else { return estimate }
     var sum = 0.0
     var weighted = 0.0
     for i in max(0, peak - 4)...min(359, peak + 4) {
@@ -101,7 +103,6 @@ nonisolated final class CrepePitchDetector {
     guard sum > 0 else { return estimate }
     let hz = 10 * pow(2, weighted / sum / 1200)
     estimate.frequency = hz.isFinite ? hz : nil
-    estimate.reason = estimate.frequency == nil ? "Pitch tidak valid" : "Pitch terdeteksi"
     return estimate
   }
 }

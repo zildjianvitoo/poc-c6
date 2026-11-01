@@ -22,14 +22,6 @@ nonisolated final class PitchWorker: @unchecked Sendable {
       }
     }
   }
-  func accept(
-    _ buffer: AVAudioPCMBuffer, time: AVAudioTime,
-    completion: @escaping @Sendable (CrepeEstimate, Double, Double, String?) -> Void
-  ) {
-    let duration = Double(buffer.frameLength) / buffer.format.sampleRate
-    let start = time.isHostTimeValid ? AVAudioTime.seconds(forHostTime: time.hostTime) : ProcessInfo.processInfo.systemUptime - duration
-    accept(buffer, start: start, completion: completion)
-  }
   func accept(_ buffer: AVAudioPCMBuffer, start: Double,
               completion: @escaping @Sendable (CrepeEstimate, Double, Double, String?) -> Void) {
     guard gate.wait(timeout: .now()) == .success else { return }

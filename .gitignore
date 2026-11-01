@@ -13,3 +13,6 @@ build/
 
 # Copyrighted test songs: keep them in a local folder that is never committed
 local-songs/
+
+# Claude Code agent worktrees
+.claude/worktrees/

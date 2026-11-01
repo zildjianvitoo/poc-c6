@@ -2,6 +2,8 @@
 //  ReferencePlaybackRepositoryImpl.swift
 //  poc-c6
 //
+//  Earphone reference playback scheduled on host time and mapped to the capture clock (PRD §7.1).
+//
 
 import AVFoundation
 
@@ -10,16 +12,15 @@ nonisolated final class ReferencePlaybackRepositoryImpl: ReferencePlaybackReposi
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
     private let capture: CaptureRepositoryImpl
+    private let configuration: () -> PoCConfiguration
     private var file: AVAudioFile?
-    var delay: TimeInterval = 0
-    var manualLatency: TimeInterval = 0
-    var volume: Float {
-        get { node.volume }
-        set { node.volume = newValue }
-    }
+    /// Playback starts this far in the future so `play(at:)` is scheduled, never late.
+    private static let schedulingLead: TimeInterval = 0.1
 
-    init(capture: CaptureRepositoryImpl) {
+    /// `configuration` is read on every play so Debug Settings changes (manual latency) apply at once.
+    init(capture: CaptureRepositoryImpl, configuration: @escaping () -> PoCConfiguration) {
         self.capture = capture
+        self.configuration = configuration
         engine.attach(node)
     }
 
@@ -42,10 +43,10 @@ nonisolated final class ReferencePlaybackRepositoryImpl: ReferencePlaybackReposi
         if !engine.isRunning { try engine.start() }
         node.scheduleSegment(file, startingFrame: start, frameCount: AVAudioFrameCount(file.length - start), at: nil)
         let host = CMClockGetTime(CMClockGetHostTimeClock())
-        let scheduled = CMTimeAdd(host, CMTime(seconds: max(delay, 0.1), preferredTimescale: 60000))
+        let scheduled = CMTimeAdd(host, CMTime(seconds: Self.schedulingLead, preferredTimescale: 60000))
         node.play(at: AVAudioTime(hostTime: AVAudioTime.hostTime(forSeconds: scheduled.seconds)))
         let session = AVAudioSession.sharedInstance()
-        let latency = session.outputLatency + session.ioBufferDuration + manualLatency
+        let latency = session.outputLatency + session.ioBufferDuration + configuration().manualLatencyCalibration
         return CMTimeAdd(capture.captureTime(forHostTime: scheduled), CMTime(seconds: latency, preferredTimescale: 60000))
     }
 

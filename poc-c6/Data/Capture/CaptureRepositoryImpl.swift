@@ -2,18 +2,33 @@
 //  CaptureRepositoryImpl.swift
 //  poc-c6
 //
+//  Front camera + built-in mic → RawMasterVideo.mov, and live CREPE pitch from the same
+//  audio buffers (PRD §6.5.4, §7.1, §7.2). Permissions are requested by PermissionGate.
+//
 
 import AVFoundation
 
+extension Notification.Name {
+    /// Posted by CaptureRepositoryImpl when capture or writing fails; `object` is the repository.
+    nonisolated static let captureRepositoryFailure = Notification.Name("CaptureRepositoryFailure")
+}
+
 /// Capture and writer state belongs exclusively to queue; clock snapshots and subscribers use lock.
-nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+    // Recording format fixed by PRD §6.5.4.
+    private static let videoSize = (width: 1080, height: 1920)
+    private static let framesPerSecond: Int32 = 30
+    private static let audioSampleRate = 48_000.0
+    private static let audioBitRate = 128_000
+    /// ~3 s of 50 ms pitch samples, so a short main-thread stall does not drop any.
+    private static let pitchStreamBuffer = 64
+
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "recording.capture", qos: .userInitiated)
     private let lock = NSLock()
     private let worker = PitchWorker()
     private var clock: CMClock = CMClockGetHostTimeClock()
     private var firstPTS: CMTime?
-    private var analyses: [UUID: AsyncStream<(PitchSample, CrepeEstimate)>.Continuation] = [:]
     private var subscribers: [UUID: AsyncStream<PitchSample>.Continuation] = [:]
     private var writer: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
@@ -22,17 +37,17 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, AVCa
     private var failure: Error? {
         didSet {
             if let failure, oldValue == nil {
-                NotificationCenter.default.post(name: Notification.Name("CaptureRepositoryFailure"), object: self, userInfo: [NSLocalizedDescriptionKey: failure.localizedDescription])
+                NotificationCenter.default.post(name: .captureRepositoryFailure, object: self, userInfo: [NSLocalizedDescriptionKey: failure.localizedDescription])
             }
         }
     }
     private var destination: URL?
     private var prepared = false
 
+    var previewSession: AVCaptureSession { session }
+
     func prepare() async throws {
-        guard await AVCaptureDevice.requestAccess(for: .video), await AVCaptureDevice.requestAccess(for: .audio) else {
-            throw NSError(domain: "Capture", code: 1, userInfo: [NSLocalizedDescriptionKey: "Camera and microphone permission are required."])
-        }
+        try Self.activateAudioSession()
         try await worker.prepare()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
@@ -82,25 +97,45 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, AVCa
         }
         try camera.lockForConfiguration()
         defer { camera.unlockForConfiguration() }
-        if camera.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 30 && $0.maxFrameRate >= 30 }) {
-            camera.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
-            camera.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 30)
+        if camera.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= Double(Self.framesPerSecond) && $0.maxFrameRate >= Double(Self.framesPerSecond) }) {
+            camera.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Self.framesPerSecond)
+            camera.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Self.framesPerSecond)
         }
     }
 
-    func stopSession() { queue.async { if self.session.isRunning { self.session.stopRunning() } } }
+    func stopSession() {
+        queue.async {
+            if self.session.isRunning { self.session.stopRunning() }
+            Self.deactivateAudioSession()
+        }
+    }
+
+    /// PRD §7.2: play-and-record for video, A2DP only (no HFP, no speaker default), built-in mic always.
+    private static func activateAudioSession() throws {
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP])
+        try audioSession.setPreferredSampleRate(audioSampleRate)
+        try audioSession.setActive(true)
+        if let mic = audioSession.availableInputs?.first(where: { $0.portType == .builtInMic }) {
+            try audioSession.setPreferredInput(mic)
+        }
+    }
+
+    private static func deactivateAudioSession() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
 
     func startRecording() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 do {
                     guard self.prepared, self.session.isRunning, !self.session.isInterrupted, !self.recording else { throw self.error("Capture is not ready.") }
-                    let directory = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("Recordings/\(UUID().uuidString)", isDirectory: true)
-                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                    let url = directory.appendingPathComponent("RawMasterVideo.mov")
+                    try SessionFiles.prepareDirectory()
+                    let url = SessionFiles.rawVideoURL
+                    try? FileManager.default.removeItem(at: url)
                     let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
-                    let video = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: 1080, AVVideoHeightKey: 1920])
-                    let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 128000])
+                    let video = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: Self.videoSize.width, AVVideoHeightKey: Self.videoSize.height])
+                    let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: Self.audioSampleRate, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: Self.audioBitRate])
                     video.expectsMediaDataInRealTime = true
                     audio.expectsMediaDataInRealTime = true
                     guard writer.canAdd(video), writer.canAdd(audio) else { throw self.error("Video encoder unavailable.") }
@@ -173,18 +208,18 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, AVCa
             guard CMSampleBufferCopyPCMDataIntoAudioBufferList(sampleBuffer, at: 0, frameCount: Int32(count), into: buffer.mutableAudioBufferList) == noErr else { return }
             worker.accept(buffer, start: pts.seconds) { [weak self] estimate, start, _, failure in
                 if let failure {
-                    NotificationCenter.default.post(name: Notification.Name("CaptureRepositoryFailure"), object: self, userInfo: [NSLocalizedDescriptionKey: failure])
+                    NotificationCenter.default.post(name: .captureRepositoryFailure, object: self, userInfo: [NSLocalizedDescriptionKey: failure])
                     return
                 }
                 let decibels = estimate.rms > 0 ? Float(20 * log10(estimate.rms)) : -Float.infinity
                 let sample = PitchSample(captureTime: CMTime(seconds: start + estimate.centerOffset, preferredTimescale: 60000), frequency: estimate.frequency.map(Float.init), rmsDecibels: decibels)
-                self?.publish(sample, estimate: estimate)
+                self?.publish(sample)
             }
         }
     }
 
     func pitchSamples() -> AsyncStream<PitchSample> {
-        AsyncStream(bufferingPolicy: .bufferingNewest(8)) { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(Self.pitchStreamBuffer)) { continuation in
             let id = UUID()
             lock.lock(); subscribers[id] = continuation; lock.unlock()
             continuation.onTermination = { [weak self] _ in
@@ -193,20 +228,9 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, AVCa
             }
         }
     }
-    func analysisSamples() -> AsyncStream<(PitchSample, CrepeEstimate)> {
-        AsyncStream(bufferingPolicy: .bufferingNewest(8)) { continuation in
-            let id = UUID()
-            lock.lock(); analyses[id] = continuation; lock.unlock()
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                self.lock.lock(); self.analyses.removeValue(forKey: id); self.lock.unlock()
-            }
-        }
-    }
-    private func publish(_ sample: PitchSample, estimate: CrepeEstimate) {
-        lock.lock(); let streams = Array(subscribers.values); let analysisStreams = Array(analyses.values); lock.unlock()
+    private func publish(_ sample: PitchSample) {
+        lock.lock(); let streams = Array(subscribers.values); lock.unlock()
         for stream in streams { stream.yield(sample) }
-        for stream in analysisStreams { stream.yield((sample, estimate)) }
     }
     func currentCaptureTime() -> CMTime {
         lock.lock(); let clock = clock; lock.unlock()
