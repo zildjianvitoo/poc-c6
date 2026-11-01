@@ -57,7 +57,7 @@ struct RecordingView: View {
     private var cameraLayer: some View {
         // Shown once the camera is configured, so the preview connection exists and can be oriented.
         if let source = viewModel.previewSource, viewModel.status != .starting {
-            CameraPreviewView(session: source.previewSession)
+            CameraPreviewView(session: source.previewSession, device: source.previewDevice)
                 .ignoresSafeArea()
             FrameGuide()
                 .ignoresSafeArea()

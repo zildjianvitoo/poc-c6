@@ -57,6 +57,7 @@ Pegang iPhone tegak di depan wajah, seperti selfie.
 
 | # | Langkah | Yang diharapkan | Hasil |
 |---|---|---|---|
+| 3.0 | Tekan Record | Setelah "Getting ready…", hitung mundur 3·2·1 tanpa suara, lalu musik mulai | |
 | 3.1 | Lihat layar saat sesi mulai | Kamera depan penuh, **ter-mirror seperti cermin**, bingkai 9:16, piano roll di tengah, top bar "Segment 1 / 3 · Attempt 1" | |
 | 3.2 | Dengarkan earphone | Musik demo terdengar **hanya di earphone**, tidak di speaker | |
 | 3.3 | Senandungkan not yang lewat garis kuning | Garis trail muncul: **hijau** kalau pas, **merah** kalau meleset, kosong saat diam | |

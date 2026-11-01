@@ -54,12 +54,13 @@ nonisolated struct LoopStateController: Sendable {
     /// Segments 0..<passedCount have passed (always a prefix, PRD §5.7).
     var passedCount: Int { phase == .ended && segmentIndex >= segments.count ? segments.count : segmentIndex }
 
-    /// First attempt of the first segment: pre-roll without a countdown.
-    mutating func begin() -> Action {
-        guard phase == .idle, let segment = currentSegment else { return .none }
-        attempts[segmentIndex] = 1
-        phase = .preRoll
-        return .startPlayback(from: preRollStart(for: segment))
+    /// The session starts with the same silent countdown as a retry, so the singer (and the
+    /// microphone) are ready before the first note. Playback starts when it ends (`tick`).
+    mutating func begin(now: TimeInterval) -> Action {
+        guard phase == .idle, currentSegment != nil else { return .none }
+        countdownEndsAt = now + TimeInterval(configuration.countdownSeconds)
+        phase = .countdown(remaining: configuration.countdownSeconds)
+        return .none
     }
 
     mutating func tick(now: TimeInterval, songTime: TimeInterval?) -> Action {

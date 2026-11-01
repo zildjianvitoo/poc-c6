@@ -159,7 +159,7 @@ final class RecordingViewModel {
             sessionStart = capture.currentCaptureTime().seconds
             lastStorageCheck = sessionStart
             status = .recording
-            perform(loop.begin())
+            perform(loop.begin(now: capture.currentCaptureTime().seconds))
             startTicking()
         } catch {
             stopObserving()

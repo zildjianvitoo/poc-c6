@@ -16,7 +16,15 @@ nonisolated final class PitchWorker: @unchecked Sendable {
       queue.async { [self] in
         do {
           frames = PitchFrameBuffer()
-          if detector == nil { detector = try CrepePitchDetector() }
+          if detector == nil {
+            let detector = try CrepePitchDetector()
+            // The first CoreML predictions are slow; while one runs, incoming buffers are dropped,
+            // so the first second of singing went undetected. Warm up on a voiced tone first.
+            let rate = 48_000.0
+            let tone = (0..<4096).map { Float(0.3 * sin(2 * Double.pi * 220 * Double($0) / rate)) }
+            for _ in 0..<3 { _ = try detector.analyze(tone, sampleRate: rate) }
+            self.detector = detector
+          }
           continuation.resume()
         } catch { continuation.resume(throwing: error) }
       }

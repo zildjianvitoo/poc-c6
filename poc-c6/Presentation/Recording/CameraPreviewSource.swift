@@ -10,4 +10,6 @@ import AVFoundation
 
 nonisolated protocol CameraPreviewSource: AnyObject {
     var previewSession: AVCaptureSession { get }
+    /// The camera being previewed, for AVCaptureDevice.RotationCoordinator. nil before setup.
+    var previewDevice: AVCaptureDevice? { get }
 }

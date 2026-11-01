@@ -18,8 +18,11 @@ nonisolated enum LoopStateControllerChecks {
         let segments = DomainFixtures.segments  // 0–6, 6–9 (instrumental), 9–16
         var loop = LoopStateController(segments: segments, configuration: configuration)
 
-        // First attempt: pre-roll from 0, no countdown.
-        try check(loop.begin() == .startPlayback(from: 0), "first segment plays from 0")
+        // First attempt: silent countdown, then pre-roll from 0.
+        try check(loop.begin(now: -3) == .none, "begin waits for the countdown")
+        try check(loop.phase == .countdown(remaining: configuration.countdownSeconds), "countdown first")
+        try check(loop.tick(now: -0.5, songTime: nil) == .none && loop.phase == .countdown(remaining: 1), "counting down")
+        try check(loop.tick(now: 0, songTime: nil) == .startPlayback(from: 0), "first segment plays from 0")
         try check(loop.phase == .preRoll && loop.currentAttempt == 1, "pre-roll, attempt 1")
         try check(loop.tick(now: 0, songTime: 0) == .none && loop.phase == .singing, "segment start → singing")
         try check(loop.tick(now: 6, songTime: 6) == .none, "no evaluation before end + tail")
@@ -53,7 +56,8 @@ nonisolated enum LoopStateControllerChecks {
 
         // Ending early keeps the passed prefix.
         var early = LoopStateController(segments: segments, configuration: configuration)
-        _ = early.begin()
+        _ = early.begin(now: -3)
+        _ = early.tick(now: 0, songTime: nil)
         _ = early.tick(now: 0, songTime: 0)
         _ = early.tick(now: 6.2, songTime: 6.2)
         _ = early.resolve(passed: true, now: 6.2)

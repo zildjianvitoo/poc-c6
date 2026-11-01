@@ -45,6 +45,9 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
     private var prepared = false
 
     var previewSession: AVCaptureSession { session }
+    var previewDevice: AVCaptureDevice? {
+        (session.inputs.compactMap { $0 as? AVCaptureDeviceInput }.first { $0.device.hasMediaType(.video) })?.device
+    }
 
     func prepare() async throws {
         try Self.activateAudioSession()

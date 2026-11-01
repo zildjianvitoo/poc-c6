@@ -120,6 +120,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 * **Score** = hits / evaluated frames. PASSED if ≥ 0.75. A segment with zero evaluated frames auto-passes.
 * **Missed note** (flashed red) = note whose own hit ratio < 50%.
 * **Timing:** evaluation runs at `segment end + latencyOffset + 150 ms` (see §7.1).
+* **Session start:** the first attempt also begins with the silent `3.. 2.. 1..` countdown, then the pre-roll, so the singer and the pitch detector are ready before the first note *(added 2026-11-01 after device testing)*.
 * **On PASSED:** playback continues uninterrupted into the next segment.
 * **On TRY AGAIN:** stop playback → result (~1 s, missed notes red) → `3.. 2.. 1..` (3 s, silent) → **pre-roll** of 2.0 s of reference audio before the segment start (from 0 if not available) → segment. Pre-roll and countdown are never part of a take's video range.
 
