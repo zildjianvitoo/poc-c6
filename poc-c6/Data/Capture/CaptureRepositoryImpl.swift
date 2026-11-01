@@ -14,7 +14,7 @@ extension Notification.Name {
 }
 
 /// Capture and writer state belongs exclusively to queue; clock snapshots and subscribers use lock.
-nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, MicrophoneSampleSource, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
     // Recording format fixed by PRD §6.5.4 (portrait 1080×1920, see makeVideoInput).
     private static let framesPerSecond: Int32 = 30
     static let portraitRotation: CGFloat = 90
@@ -30,6 +30,7 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
     private var clock: CMClock = CMClockGetHostTimeClock()
     private var firstPTS: CMTime?
     private var subscribers: [UUID: AsyncStream<PitchSample>.Continuation] = [:]
+    private var chunkSubscribers: [UUID: AsyncStream<MeasureSyncUseCase.AudioChunk>.Continuation] = [:]
     private var writer: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
     private var audioInput: AVAssetWriterInput?
@@ -227,6 +228,7 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else { return }
             buffer.frameLength = AVAudioFrameCount(count)
             guard CMSampleBufferCopyPCMDataIntoAudioBufferList(sampleBuffer, at: 0, frameCount: Int32(count), into: buffer.mutableAudioBufferList) == noErr else { return }
+            publishChunk(buffer, start: pts.seconds)
             worker.accept(buffer, start: pts.seconds) { [weak self] estimate, start, _, failure in
                 if let failure {
                     NotificationCenter.default.post(name: .captureRepositoryFailure, object: self, userInfo: [NSLocalizedDescriptionKey: failure])
@@ -266,6 +268,32 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
         lock.lock(); let streams = Array(subscribers.values); lock.unlock()
         for stream in streams { stream.yield(sample) }
     }
+    /// Raw microphone samples on the capture clock, for the click test. Only while recording.
+    func audioChunks() -> AsyncStream<MeasureSyncUseCase.AudioChunk> {
+        AsyncStream(bufferingPolicy: .unbounded) { continuation in
+            let id = UUID()
+            lock.lock(); chunkSubscribers[id] = continuation; lock.unlock()
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.lock.lock(); self.chunkSubscribers.removeValue(forKey: id); self.lock.unlock()
+            }
+        }
+    }
+
+    private func publishChunk(_ buffer: AVAudioPCMBuffer, start: TimeInterval) {
+        lock.lock(); let streams = Array(chunkSubscribers.values); lock.unlock()
+        guard !streams.isEmpty else { return }
+        let stride = buffer.format.isInterleaved ? Int(buffer.format.channelCount) : 1
+        let samples: [Float]
+        if let channel = buffer.floatChannelData?[0] {
+            samples = (0..<Int(buffer.frameLength)).map { channel[$0 * stride] }
+        } else if let channel = buffer.int16ChannelData?[0] {
+            samples = (0..<Int(buffer.frameLength)).map { Float(channel[$0 * stride]) / 32768 }
+        } else { return }
+        let chunk = MeasureSyncUseCase.AudioChunk(startTime: start, sampleRate: buffer.format.sampleRate, samples: samples)
+        for stream in streams { stream.yield(chunk) }
+    }
+
     func currentCaptureTime() -> CMTime {
         lock.lock(); let clock = clock; lock.unlock()
         return CMClockGetTime(clock)

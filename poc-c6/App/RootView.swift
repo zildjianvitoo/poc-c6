@@ -13,6 +13,8 @@ import SwiftUI
 struct RootView: View {
     let flow: AppFlow
     @State private var showsDebugSettings = false
+    @State private var opensSyncTest = false
+    @State private var showsSyncTest = false
 
     var body: some View {
         Group {
@@ -61,10 +63,29 @@ struct RootView: View {
             }
             #endif
         }
-        .sheet(isPresented: $showsDebugSettings) {
+        .sheet(isPresented: $showsDebugSettings, onDismiss: {
+            if opensSyncTest {
+                opensSyncTest = false
+                showsSyncTest = true
+            }
+        }) {
             DebugSettingsView(configuration: flow.container.configuration,
                               onSave: { flow.updateConfiguration($0) },
-                              onRetestVocalRange: { flow.retestVocalRange() })
+                              onRetestVocalRange: { flow.retestVocalRange() },
+                              onMeasureSync: { opensSyncTest = true })
+        }
+        .fullScreenCover(isPresented: $showsSyncTest) {
+            PermissionGate([.camera, .microphone], provider: flow.container.permissions) {
+                SyncCalibrationView(viewModel: SyncCalibrationViewModel(
+                    capture: flow.container.capture,
+                    playback: flow.container.referencePlayback,
+                    currentCalibration: flow.container.configuration.manualLatencyCalibration,
+                    onApply: { value in
+                        var configuration = flow.container.configuration
+                        configuration.manualLatencyCalibration = value
+                        flow.updateConfiguration(configuration)
+                    }))
+            }
         }
     }
 

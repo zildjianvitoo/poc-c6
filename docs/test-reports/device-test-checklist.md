@@ -119,16 +119,20 @@ Pegang iPhone tegak di depan wajah, seperti selfie.
 | 7.3 | Dengarkan sinkronnya | Kemungkinan suaramu sedikit telat dibanding musik — catat seberapa terasa | |
 | 7.4 | Kalau telat: Debug Settings (ikon slider kanan atas, di luar layar rekam) → **Latency calibration** → naikkan 0.05–0.15 s → Save → ulangi | Makin sinkron | |
 
-## 8. Tes sinkron (tes klik, TK-05 / ZV-12)
+## 8. Tes sinkron otomatis (tes klik, TK-05 / TK-16)
 
-Tujuannya mengukur selisih waktu antara musik dan rekaman (target < 40 ms, potongan ±1 frame).
+Mengukur selisih antara musik yang terdengar dan rekaman mic (target < 40 ms), lalu menyimpan koreksinya.
 
-1. Pakai **earphone kabel**. Mulai sesi, lalu tempelkan satu earbud ke **mic iPhone di bagian bawah** dan jangan bernyanyi. Mic akan merekam musik dari earbud itu.
-2. Biarkan sampai selesai. Musik demo berisi melodi panduan, jadi mic "mendengar" nada yang benar dan semua segmen seharusnya lolos sendiri. Kalau ada TRY AGAIN, dekatkan earbud ke mic dan naikkan volume.
-3. Dengarkan hasil video: musik yang "bocor" dari earbud dan musik instrumental harus **menumpuk pas**. Kalau terdengar seperti **gema/dobel**, berarti ada selisih.
-4. Catat hasilnya. Pengukuran angka pastinya butuh alat tambahan (lihat catatan di bawah).
-
-> Catatan: untuk angka pasti (ms), aku perlu menambahkan dua alat: tombol debug untuk menyimpan rekaman mentah + log take, dan script Mac untuk menganalisisnya. Lakukan bagian 1–7 dulu.
+1. Debug Settings → **Measure Audio Sync…**
+2. Pilih salah satu:
+   - **Earphone:** tempelkan satu earbud ke mic iPhone di bagian bawah.
+   - **Speaker:** nyalakan dulu *Allow recording without earphones*, volume keras, ruangan tenang.
+3. **Start Test** → diam ±10 detik (terdengar 8 klik).
+4. Hasilnya: "Sound is heard … ms later/earlier than expected", jumlah klik terdengar dan *spread*.
+   - Kalau hijau, tekan **Apply** → nilai *Latency calibration* diperbarui otomatis.
+   - Kalau oranye (tidak andal), ulangi dengan volume lebih keras / ruangan lebih tenang.
+5. Rekam sesi lagi dan cek apakah vokal dan musik di video hasil sudah sinkron. Jalankan **Test Again** — hasilnya harus mendekati 0 ms.
+6. Lakukan terpisah untuk speaker, earphone kabel, dan AirPods (latency-nya berbeda). Catat angkanya.
 
 ## 9. Laporan
 

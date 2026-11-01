@@ -13,13 +13,16 @@ struct DebugSettingsView: View {
     @State private var allowsSpeakerRecording = DebugOptions.allowsSpeakerRecording
     private let onSave: (PoCConfiguration) -> Void
     private let onRetestVocalRange: () -> Void
+    private let onMeasureSync: () -> Void
 
     init(configuration: PoCConfiguration,
          onSave: @escaping (PoCConfiguration) -> Void,
-         onRetestVocalRange: @escaping () -> Void) {
+         onRetestVocalRange: @escaping () -> Void,
+         onMeasureSync: @escaping () -> Void = {}) {
         _configuration = State(initialValue: configuration)
         self.onSave = onSave
         self.onRetestVocalRange = onRetestVocalRange
+        self.onMeasureSync = onMeasureSync
     }
 
     var body: some View {
@@ -68,6 +71,10 @@ struct DebugSettingsView: View {
                     Text("Plays the song through the loudspeaker. The song leaks into the microphone, so scores and the final mix are not representative. Debug builds only.")
                 }
                 Section {
+                    Button("Measure Audio Sync…") {
+                        onMeasureSync()
+                        dismiss()
+                    }
                     Button("Re-test Vocal Range") {
                         onRetestVocalRange()
                         dismiss()
