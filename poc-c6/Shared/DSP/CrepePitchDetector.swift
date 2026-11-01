@@ -17,6 +17,8 @@ nonisolated final class CrepePitchDetector {
   /// in TrackLivePitchUseCase; this only saves work on near-silence (−60 dBFS).
   static let minimumRMS = 0.001
   private let model: MLModel
+  /// Reused between frames (creating one per frame was slow enough to make the worker fall behind).
+  private var cachedConverter: (rate: Double, converter: AVAudioConverter)?
   init(modelURL: URL? = nil) throws {
     guard let url = modelURL ?? Bundle.main.url(forResource: "CrepeTiny", withExtension: "mlmodelc")
     else {
@@ -33,6 +35,15 @@ nonisolated final class CrepePitchDetector {
   func detect(_ samples: [Float], sampleRate: Double) throws -> Double? {
     try analyze(samples, sampleRate: sampleRate).frequency
   }
+  private func converter(from source: AVAudioFormat, to target: AVAudioFormat) -> AVAudioConverter? {
+    if let cached = cachedConverter, cached.rate == source.sampleRate {
+      cached.converter.reset()
+      return cached.converter
+    }
+    guard let converter = AVAudioConverter(from: source, to: target) else { return nil }
+    cachedConverter = (source.sampleRate, converter)
+    return converter
+  }
   func analyze(_ samples: [Float], sampleRate: Double) throws -> CrepeEstimate {
     guard sampleRate > 0, !samples.isEmpty else { return CrepeEstimate() }
     guard
@@ -42,7 +53,7 @@ nonisolated final class CrepePitchDetector {
         commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
       let source = AVAudioPCMBuffer(
         pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(samples.count)),
-      let converter = AVAudioConverter(from: sourceFormat, to: targetFormat),
+      let converter = converter(from: sourceFormat, to: targetFormat),
       let output = AVAudioPCMBuffer(
         pcmFormat: targetFormat,
         frameCapacity: AVAudioFrameCount(ceil(Double(samples.count) * 16000 / sampleRate) + 256))

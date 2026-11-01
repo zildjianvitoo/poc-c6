@@ -103,6 +103,9 @@ struct RecordingView: View {
                     .padding(.vertical, 6)
                     .background(.purple.opacity(0.85), in: .capsule)
             }
+            #if DEBUG
+            pitchDebug
+            #endif
             if viewModel.showsBluetoothWarning {
                 Label("Wired earphones give the best sync", systemImage: "airpodspro")
                     .font(.footnote)
@@ -123,6 +126,17 @@ struct RecordingView: View {
             Spacer()
         }
         .foregroundStyle(.white)
+    }
+
+    /// Debug builds: is the microphone heard, and how often? 20 samples/s is the target (50 ms hop).
+    private var pitchDebug: some View {
+        let stats = viewModel.pitchStats
+        let level = stats.lastLevelDB.isFinite ? "\(Int(stats.lastLevelDB)) dB" : "silent"
+        return Text("Mic \(stats.lastNote ?? "—") · \(stats.samplesPerSecond)/s · voiced \(stats.voicedPercent)% · \(level)")
+            .font(.caption.monospacedDigit())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.6), in: .capsule)
     }
 
     private var topBar: some View {

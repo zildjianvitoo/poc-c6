@@ -12,6 +12,7 @@ Isi kolom **Hasil** dengan ✅ / ❌ + catatan singkat. Kalau ❌, ambil screens
 2. Lagu akan diputar lewat speaker dan layar rekam menampilkan label ungu *"Speaker test mode: scores are not reliable"*.
 3. Karena lagu bocor ke mic, melodi panduan ikut "dinyanyikan" oleh speaker:
    - **Untuk tes loop / TRY AGAIN:** kecilkan volume iPhone ke **0**, lalu senandungkan sambil melihat piano roll. Diam di segmen 3 untuk memicu TRY AGAIN.
+   - Kalau range-mu rendah, lagu ditranspose turun **satu oktaf** hanya di piano roll; speaker tetap memutar melodi di oktaf asli. Mic lalu mendengar dua nada (suaramu + speaker) dan sering menangkap yang dari speaker → dianggap meleset. Jadi saat menilai deteksi suara di mode speaker, **volume harus 0**.
    - **Untuk tes sinkron (bagian 8):** volume dikeraskan, jangan bernyanyi; melodi dari speaker akan lolos sendiri.
 4. Yang **tidak** bisa dites dengan mode ini: 2.2 (colok earphone), 6.1 (cabut earphone), seluruh bagian 7 (AirPods), dan kualitas suara di 4.3. Tes 2.1 dilakukan dengan toggle **mati**.
 5. Matikan lagi toggle-nya setelah selesai.
@@ -30,6 +31,16 @@ Isi kolom **Hasil** dengan ✅ / ❌ + catatan singkat. Kalau ❌, ambil screens
 5. Di Xcode pilih iPhone-mu sebagai tujuan (bagian atas jendela), lalu **Run** (⌘R).
    - Kalau ada error signing: target `poc-c6` → Signing & Capabilities → pilih Team-mu.
    - Kalau iPhone bilang *Untrusted Developer*: Settings → General → VPN & Device Management → Trust.
+
+### Membaca baris debug "Mic …" di layar rekam
+
+Di bawah top bar ada baris kecil, mis. `Mic A3 · 20/s · voiced 85% · -24 dB`:
+- **Nama not**: nada yang sedang didengar mic (— = tidak ada nada).
+- **20/s**: jumlah analisis per detik. Harus sekitar **19–20**. Jauh di bawah itu → analisis tertinggal (laporkan angkanya).
+- **voiced %**: berapa persen detik terakhir terdengar bernyanyi. Saat kamu nyanyi harus tinggi.
+- **dB**: kerasnya suara di mic. Di bawah −40 dB dianggap diam (noise gate).
+
+Kalau trail tidak muncul padahal kamu bernyanyi, screenshot baris ini.
 
 ## 1. Izin & alur awal
 

@@ -39,6 +39,13 @@ final class RecordingViewModel {
         let isHit: Bool
     }
 
+    struct PitchStats: Equatable {
+        var samplesPerSecond = 0
+        var voicedPercent = 0
+        var lastNote: String?
+        var lastLevelDB: Float = -.infinity
+    }
+
     /// PRD §5.8: required free space before Record, and the floor that stops a running session.
     static let requiredStorageBytes: Int64 = 1_500_000_000
     static let reserveStorageBytes: Int64 = 128_000_000
@@ -57,6 +64,8 @@ final class RecordingViewModel {
     private(set) var lastResult: SegmentResult?
     private(set) var trail: [TrailPoint] = []
     private(set) var route: AudioOutputRoute
+    /// Debug readout: pitch samples in the last second, how many were voiced, and the last note.
+    private(set) var pitchStats = PitchStats()
 
     @ObservationIgnored private let capture: any CaptureRepository
     @ObservationIgnored private let playback: any ReferencePlaybackRepository
@@ -77,6 +86,7 @@ final class RecordingViewModel {
     @ObservationIgnored private var lastStorageCheck: TimeInterval = 0
     @ObservationIgnored private var rawVideoURL: URL?
     @ObservationIgnored private var isCapturing = false
+    @ObservationIgnored private var recentSamples: [(time: TimeInterval, voiced: Bool)] = []
 
     init(song: PreparedSong,
          capture: any CaptureRepository,
@@ -324,6 +334,21 @@ final class RecordingViewModel {
         status = .failed(error)
     }
 
+    // MARK: - Debug readout
+
+    private func updatePitchStats(_ sample: PitchSample) {
+        let time = sample.captureTime.seconds
+        let voiced = sample.frequency != nil && sample.rmsDecibels >= configuration.noiseGateDBFS
+        recentSamples.append((time, voiced))
+        recentSamples.removeAll { $0.time < time - 1 }
+        var stats = PitchStats()
+        stats.samplesPerSecond = recentSamples.count
+        stats.voicedPercent = recentSamples.isEmpty ? 0 : recentSamples.filter(\.voiced).count * 100 / recentSamples.count
+        stats.lastNote = voiced ? sample.frequency.flatMap { PitchMath.midi(fromFrequency: Double($0)) }.map { PitchMath.noteName(midi: Int($0.rounded())) } : nil
+        stats.lastLevelDB = sample.rmsDecibels
+        pitchStats = stats
+    }
+
     // MARK: - Inputs
 
     private func observe() {
@@ -356,6 +381,7 @@ final class RecordingViewModel {
     }
 
     private func handle(_ sample: PitchSample) {
+        updatePitchStats(sample)
         guard let anchor, loop.phase == .preRoll || loop.phase == .singing else { return }
         let evaluation = TrackLivePitchUseCase(configuration: configuration)
             .execute(sample: sample, playbackAnchor: anchor, song: song)
