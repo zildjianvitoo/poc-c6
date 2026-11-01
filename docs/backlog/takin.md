@@ -16,7 +16,7 @@ Milestone: **M1** kontrak beku · **M2** end-to-end demo sintetis · **M3** end-
 poc-c6/Domain/UseCases/   TrackLivePitchUseCase, EvaluateSegmentUseCase
 poc-c6/Data/Capture/      CaptureRepositoryImpl
 poc-c6/Data/Audio/        ReferencePlaybackRepositoryImpl, AudioRouteMonitorImpl
-poc-c6/Shared/DSP/        YINPitchDetector (dipakai juga oleh Ikzaz)
+poc-c6/Shared/DSP/        CrepePitchDetector (dipakai juga oleh Ikzaz)
 poc-c6/Data/Session/      SessionTakeLogRepositoryImpl
 poc-c6/Presentation/Recording/   RecordingPianoRollView, RecordingViewModel,
                                  CorrectionOverlayView, LoopStateController
@@ -27,7 +27,7 @@ poc-c6/Presentation/Recording/   RecordingPianoRollView, RecordingViewModel,
 |---|---|---|
 | Kamu pakai | `PreparedSong` | dari Ikzaz (sementara pakai `DomainFixtures.preparedSong` / demo sintetis Zildjian) |
 | Kamu hasilkan | URL video mentah + `[TakeAttemptLog]` LOLOS (waktu file, sudah dikompensasi latency, + handle 30 ms) | Zildjian |
-| Kamu hasilkan | `YINPitchDetector` | Ikzaz |
+| Kamu hasilkan | `CrepePitchDetector` | Ikzaz |
 | Kamu implementasikan | `CaptureRepository`, `ReferencePlaybackRepository`, `AudioRouteMonitor`, `SessionTakeLogRepository` | — |
 
 ---
@@ -38,8 +38,8 @@ poc-c6/Presentation/Recording/   RecordingPianoRollView, RecordingViewModel,
 |---|---|---|---|---|---|
 | TK-01 | Review & setujui kontrak Domain bersama tim | P0 | M1 | — | PR kontrak di-approve 3 orang |
 | TK-02 | Audio session (PRD §7.2): `.playAndRecord`, `.videoRecording`, hanya `.allowBluetoothA2DP`, input built-in mic | P0 | M2 | — | Mic tetap built-in walau pakai AirPods |
-| TK-03 | `YINPitchDetector` (vDSP, window 2048, hop 50 ms, noise gate, confidence) — **kerjakan awal, Ikzaz menunggu** | P0 | M2 | — | Nada sinus 220/440/880 Hz terdeteksi ±10 cents |
-| TK-04 | `CaptureRepositoryImpl`: front camera 1080×1920 @30, mirror, `AVCaptureVideoDataOutput` + `AVCaptureAudioDataOutput` → `AVAssetWriter` (HEVC), `startSession(atSourceTime: firstVideoPTS)`, `automaticallyConfiguresApplicationAudioSession = false` | P0 | M2 | TK-02 | File `.mov` terekam portrait + mirror; `fileTime(forCaptureTime:)` akurat |
+| TK-03 | `CrepePitchDetector` (CREPE tiny CoreML, hop 50 ms, noise gate, confidence ≥ 0.5) — **keputusan tim 1 Nov: CREPE menggantikan YIN**; API harus bisa dipakai Ikzaz untuk vocal range & fallback analisis | P0 | M2 | — | Nada sinus 220/440/880 Hz terdeteksi ±10 cents; lisensi marl/crepe + torchcrepe di `Licenses/` |
+| TK-04 | `CaptureRepositoryImpl`: front camera 1080×1920 @30, mirror, `AVCaptureVideoDataOutput` + `AVCaptureAudioDataOutput` → `AVAssetWriter` (HEVC), `startSession(atSourceTime: firstVideoPTS)`, `automaticallyConfiguresApplicationAudioSession = false` | P0 | M2 | TK-02 | File `.mov` terekam portrait + mirror di `SessionFiles.rawVideoURL` (dibersihkan otomatis tiap sesi baru); `fileTime(forCaptureTime:)` akurat |
 | TK-05 | `ReferencePlaybackRepositoryImpl`: `AVAudioPlayerNode`, `play(at:)` host time, konversi ke capture clock + `outputLatency` (PRD §7.1) | P0 | M2 | TK-04 | **Tes klik:** putar klik di earphone, rekam dengan mic didekatkan, selisih di file ≤ 1 frame |
 | TK-06 | Pitch live dari buffer audio capture → `pitchSamples()` (tanpa mic kedua), di queue sendiri, `nonisolated` | P0 | M2 | TK-03, TK-04 | Stream jalan selama rekaman tanpa drop frame video |
 | TK-07 | `TrackLivePitchUseCase`: capture time → waktu lagu (anchor playback), bandingkan dengan target ter-transpose → `PitchEvaluation` | P0 | M2 | TK-06 | Toleransi ±50 cents & ±100 ms sesuai `PoCConfiguration` |
@@ -52,6 +52,9 @@ poc-c6/Presentation/Recording/   RecordingPianoRollView, RecordingViewModel,
 | TK-14 | Tombol End Session + konfirmasi (*Export N of M* / *Keep recording* / *Discard*) | P0 | M3 | TK-10 | Memicu export sebagian ke Zildjian |
 | TK-15 | Interupsi (telepon, background, earphone dicabut, kamera dipakai app lain), batas sesi 15 menit, cek storage ≥ 1.5 GB | P1 | M3 | TK-14 | Sesi berhenti rapi + tawaran export sebagian |
 | TK-16 | Kalibrasi latency manual (nilai di Debug Settings) dipakai di `latencyOffset` | P2 | M3 | TK-05 | Mengubah nilai menggeser titik potong |
+| TK-17 | Rapikan dari audit 1 Nov (A-1…A-3): kembalikan `scripts/check-contracts.sh`, keluarkan `SegmentEvaluator`/`PracticeProgress`/kode MAE dari `Domain/UseCases`, ganti `Phrase`/`ReferenceNote`/`PracticeConfiguration` dengan `SongSegment`/`TargetMIDINote`/`PoCConfiguration` | P0 | M2 | — | `check-contracts.sh` versi `main` & `check-comping.sh` hijau |
+| TK-18 | Sambungkan ke app: merge `main`, layar rekam di `RootView` case `.recording`, terima `PreparedSong` dari `AppFlow`, tulis ke `SessionFiles.rawVideoURL`, akhiri dengan `flow.sessionEnded(with: CompingCompositionPlan)`, izin lewat `PermissionGate` | P0 | M2 | TK-17 | Alur demo sintetis → rekam → layar Export jalan |
+| TK-19 | Perbaiki scoring: satu acuan grid frame untuk evaluasi & penilaian, pakai `TrackLivePitchUseCase` (transposisi) | P0 | M2 | — | Penyanyi sempurna dengan note acak (bukan kelipatan 50 ms) ≥ 95%; `octaveShift = −1` dinilai benar |
 
 ## Catatan
 - **Jangan pakai `Timer`/`Date()`/stopwatch** untuk waktu potong (PRD §7.1).

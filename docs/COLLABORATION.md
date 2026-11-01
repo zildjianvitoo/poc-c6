@@ -90,7 +90,7 @@ Cek kontrak di Mac tanpa simulator:
 | `PreparedSong` dari Ikzaz | `DomainFixtures.preparedSong` → lalu demo sintetis Zildjian (ZV-06) |
 | Take LOLOS dari Takin | `DomainFixtures.compingPlan()` |
 | Implementasi protocol orang lain | Fakes di `poc-c6/Fakes/` (ZV-03), dipilih lewat `AppContainer` |
-| `YINPitchDetector` dari Takin | Tunggu TK-03 (dikerjakan paling awal) |
+| `CrepePitchDetector` dari Takin | Sudah ada di branch `takin` (TK-03); pakai setelah di-merge ke `main` |
 
 ---
 
@@ -178,7 +178,8 @@ feat(contract)!: rename audioDuration to duration
 - Index segmen mulai dari 0; UI menampilkan `index + 1`.
 - Satu tipe utama per file, nama file = nama tipe.
 - `Domain/` hanya boleh import `Foundation` dan `CoreMedia` (dijaga oleh `check-contracts.sh`, karena script itu compile di macOS).
-- Teks UI dalam bahasa Inggris.
+- Teks UI dalam bahasa Inggris. Pesan error diambil dari `UserFacingError` dan ditampilkan dengan `ErrorStateView`; kalau butuh pesan baru, tambahkan case di sana.
+- Izin kamera/mic diurus `PermissionGate` di `RootView`. Layar fitur tidak perlu (dan tidak boleh) meminta izin sendiri.
 
 ---
 
@@ -194,6 +195,7 @@ feat(contract)!: rename audioDuration to duration
 ## 9. Definition of Done (per task)
 - [ ] Build sukses, tidak ada warning baru
 - [ ] `./scripts/check-contracts.sh` hijau (kalau menyentuh `Domain/`)
+- [ ] `./scripts/check-comping.sh` hijau (kalau menyentuh `Data/Composition/`)
 - [ ] Pengecek kontrak dipanggil di titik serah-terima (kalau ada)
 - [ ] Diuji di iPhone fisik untuk fitur kamera/audio
 - [ ] Kriteria "Selesai kalau" di backlog terpenuhi

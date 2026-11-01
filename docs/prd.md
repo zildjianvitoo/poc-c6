@@ -40,7 +40,8 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
   * **Presentation uses MVVM:** SwiftUI `View` → `@Observable` `ViewModel` → Use Case. ViewModels never touch AVFoundation/CoreML directly; they only call Use Cases (and, for the camera preview, `CameraPreviewSource`).
   * **Kept light for the PoC:** thin Use Cases that just forward to a repository are fine; no DTOs/mappers between layers (Domain entities are used directly); no Coordinator/Router (plain SwiftUI navigation in `AppContainer`).
 * **Phase 1 (this PoC):**
-  * Native `AVFoundation`, `AVFAudio`, `Accelerate` (`vDSP` band-pass 80–1100 Hz + YIN pitch estimation for **live** pitch and as the guide-extraction fallback).
+  * Native `AVFoundation`, `AVFAudio`, `Accelerate`.
+  * **Pitch detection: CREPE tiny (CoreML, bundled `CrepeTiny.mlmodel`, ~2 MB, MIT)** for **live** pitch, the vocal range test and the guide-extraction fallback. One shared `CrepePitchDetector`; voiced only when confidence ≥ 0.5 and RMS ≥ the noise gate. Credit both marl/crepe and torchcrepe in `Licenses/`. *(Team decision 2026-11-01: replaces YIN.)*
   * **Guide extraction: Spotify Basic Pitch (CoreML)** run on the **vocal stem**, followed by monophonic reduction (§5.3). Bundled as an `.mlpackage`, no SPM dependency. Verify the model license and the CoreML export before committing.
   * **Stem separation — two-track strategy:**
     * **Track A — Guaranteed demo:** a bundled, royalty-free demo song whose stems (`mix`, `vocal`, `instrumental`) were separated **offline on a Mac** (e.g. Demucs) plus a verified guide file. Guarantees the end-to-end demo sounds good. Copyrighted songs must NOT be bundled in the repo/app.
@@ -82,14 +83,17 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 ### 5.3 Guide Extraction & Segmentation
 * **Extraction input:** the vocal stem (bundled or CoreML) or the mid channel (fallback).
 * **Primary — Basic Pitch:** resample to the model's input rate, run inference, take note events (pitch, onset, offset, confidence). Basic Pitch is polyphonic, so apply **monophonic reduction**: at each moment keep only the highest-confidence note, drop notes < 120 ms or below a confidence threshold, merge consecutive same-pitch notes separated by < 50 ms.
-* **Fallback — YIN:** band-pass 80–1100 Hz → YIN every 40 ms with confidence threshold → stable regions ≥ 120 ms (< ±50 cents variation) become notes. Used when the model fails to load or produces no notes.
+* **Fallback — CREPE:** run `CrepePitchDetector` over the vocal stem every 50 ms → frames below the confidence threshold are unvoiced → stable regions ≥ 120 ms (< ±50 cents variation) become notes. Used when Basic Pitch fails to load or produces no notes.
 * Notes are stored in the **original key**; transposition is applied at display/evaluation time.
-* **Frequency → MIDI** (YIN paths, live pitch): $M = 69 + 12 \log_2(f/440)$, implemented once in a shared helper.
+* **Frequency → MIDI** (CREPE paths, live pitch): $M = 69 + 12 \log_2(f/440)$, implemented once in a shared helper.
 * **Segmentation (`SliceSegmentsUseCase`):**
   1. Split where the gap between consecutive notes is > 0.8 s.
   2. Merge segments shorter than 3.0 s into the neighbour with the smaller gap, as long as the result is ≤ 8.0 s.
   3. Split segments longer than 8.0 s at the largest internal gap (or the note boundary closest to the middle if there is no gap).
   4. **Segments tile the whole trimmed timeline with no holes:** each boundary is placed at the midpoint of its gap; the first segment starts at 0, the last ends at the trim end.
+     * **Long gaps become instrumental-only segments with breathing room** *(team decision 2026-11-01)*: when a gap (intro, interlude, outro) is long enough that `gap − segmentGap ≥ minSegment`, its boundaries sit `segmentGap / 2` (0.4 s) away from the notes — the phrase before ends at `lastNote.end + 0.4`, the phrase after starts at `nextNote.start − 0.4`. Shorter gaps use the midpoint rule. A boundary never sits exactly on a note edge, so breaths and early onsets are not cut by the crossfade.
+     * Time comparisons (equal gaps, overlaps, end of song) use a 1 ms tolerance. Notes from analysis are clamped to `[0, duration]` and tiny overlaps (< 1 ms) are trimmed before segmentation instead of failing.
+     * Rule 3 prefers cut points that keep both sides ≥ `minSegment`; only if none exists may a shorter piece remain.
   5. A segment with no notes (instrumental intro/interlude) is marked instrumental-only: it is played and recorded but **auto-passes** without evaluation.
 
 ### 5.4 Transposition
@@ -324,12 +328,12 @@ public protocol VideoCompositionRepository: Sendable {
 
 ### 6.5 Data & Infrastructure Layer
 1. **Stem separation:** `BundledStemsRepository` (Track A demo), `SynthesizedDemoRepository` (developer fallback), `CenterChannelStemRepository` (L−R / mid fallback), `CoreMLStemSeparationRepository` (Track B spike, behind a feature flag).
-2. **Guide extraction:** `BasicPitchAnalysisRepository` (CoreML + monophonic reduction) and `YINAnalysisRepository` (`AVAssetReader` → PCM float → `vDSP` biquad band-pass → YIN), both conforming to `AudioAnalysisRepository` (§5.3). Fallback chosen in `PrepareSongUseCase`.
+2. **Guide extraction:** `BasicPitchAnalysisRepository` (CoreML + monophonic reduction) and `CrepeAnalysisRepository` (`AVAssetReader` → PCM float → `CrepePitchDetector`), both conforming to `AudioAnalysisRepository` (§5.3). Fallback chosen in `PrepareSongUseCase`.
 3. **`AudioTranspositionRepositoryImpl`** — `AVAudioEngine` offline manual rendering + `AVAudioUnitTimePitch`.
 4. **`CaptureRepositoryImpl`**
    * `AVCaptureSession` with `automaticallyConfiguresApplicationAudioSession = false`, front `builtInWideAngleCamera` (1080×1920 @ 30 fps, video connection mirrored), built-in mic.
    * `AVCaptureVideoDataOutput` + `AVCaptureAudioDataOutput` → `AVAssetWriter` (`RawMasterVideo.mov`, HEVC + AAC), `startSession(atSourceTime: firstVideoPTS)`; audio samples before `firstVideoPTS` dropped.
-   * The same audio sample buffers feed the YIN pitch detector (2048-sample window, 50 ms hop) → `PitchSample`. No second mic consumer.
+   * The same audio sample buffers feed `CrepePitchDetector` (1024-sample window at 16 kHz, 50 ms hop) → `PitchSample`. No second mic consumer.
 5. **`ReferencePlaybackRepositoryImpl`** — `AVAudioEngine` + `AVAudioPlayerNode`, `scheduleSegment` started with `play(at: AVAudioTime(hostTime:))` a few ms in the future; converts host time to the capture clock (§7.1).
 6. **`AudioRouteMonitorImpl`** — `AVAudioSession` route-change and interruption notifications.
 7. **`SessionTakeLogRepositoryImpl`** — thread-safe in-memory storage.
@@ -425,12 +429,13 @@ poc-c6/
     Repositories/ protocols from §6.3
     Contracts/    ContractValidation, DomainFixtures
     UseCases/     use cases from §6.4
-  Shared/DSP/     YINPitchDetector (live pitch, vocal range test, YIN fallback)
-  Fakes/          fake implementations of every protocol (DEBUG)
+  Shared/DSP/     CrepePitchDetector (live pitch, vocal range test, guide fallback)
+  Shared/Storage/ SessionFiles (raw + final video locations, cleanup per session)
+  Fakes/          fake implementations of every protocol (used until real ones land)
   Data/
     Separation/   Bundled, Synthesized, CenterChannel, CoreML (flagged)
-    Audio/        BasicPitchAnalysisRepository, YINAnalysisRepository, AudioTranspositionRepositoryImpl,
-                  ReferencePlaybackRepositoryImpl, AudioRouteMonitorImpl, YINPitchDetector
+    Audio/        BasicPitchAnalysisRepository, CrepeAnalysisRepository, AudioTranspositionRepositoryImpl,
+                  ReferencePlaybackRepositoryImpl, AudioRouteMonitorImpl
     Capture/      CaptureRepositoryImpl
     Composition/  VideoCompositionRepositoryImpl
     Session/      SessionTakeLogRepositoryImpl, VocalRangeRepositoryImpl
@@ -460,8 +465,8 @@ Detailed per-person backlogs: `docs/backlog/ikzaz.md`, `docs/backlog/takin.md`, 
 
 | Owner | Board rows | Scope (PRD sections) |
 |---|---|---|
-| **Ikzaz** | Row 1 — Import → Audio→MIDI → Guide | Vocal range test UI + persistence (§5.1); import, trim, disclaimer (§5.2); stem separation incl. center-channel fallback (§3); Basic Pitch + YIN fallback, segmentation (§5.3); transposition plan + offline render (§5.4); `PrepareSongUseCase`. *(proposed)* Track A demo asset prep on Mac; Track B CoreML separation spike + written result; import error messages. |
-| **Takin** | Row 2 — Record → Sing → Live feedback<br>Row 3 — Evaluate → Rewind / Continue | Capture + `AVAssetWriter` + master clock (§6.5.4, §7.1); reference playback with pre-roll (§6.5.5); audio session + earphone/route check (§7.2); live YIN pitch + `TrackLivePitchUseCase`; recording screen + piano roll (§5.5); `EvaluateSegmentUseCase`, `LoopStateController` state machine, countdown, missed-note highlight (§5.6); `SessionTakeLogRepository`; End Session trigger + interruption detection (§5.7–5.8). |
+| **Ikzaz** | Row 1 — Import → Audio→MIDI → Guide | Vocal range test UI + persistence (§5.1); import, trim, disclaimer (§5.2); stem separation incl. center-channel fallback (§3); Basic Pitch + CREPE fallback, segmentation (§5.3); transposition plan + offline render (§5.4); `PrepareSongUseCase`. *(proposed)* Track A demo asset prep on Mac; Track B CoreML separation spike + written result; import error messages. |
+| **Takin** | Row 2 — Record → Sing → Live feedback<br>Row 3 — Evaluate → Rewind / Continue | Capture + `AVAssetWriter` + master clock (§6.5.4, §7.1); reference playback with pre-roll (§6.5.5); audio session + earphone/route check (§7.2); live CREPE pitch (`CrepePitchDetector`, shared) + `TrackLivePitchUseCase`; recording screen + piano roll (§5.5); `EvaluateSegmentUseCase`, `LoopStateController` state machine, countdown, missed-note highlight (§5.6); `SessionTakeLogRepository`; End Session trigger + interruption detection (§5.7–5.8). |
 | **Zildjian Vito** | Row 4 — End Record → Pick takes → Cut + stitch | `AutoCompingVideoUseCase`, `VideoCompositionRepositoryImpl`: timeline placement, A/B crossfade, instrumental mix, mirroring, export (§5.9); partial export (§5.7). *(proposed)* Export Preview screen (player, Share, Save to Photos); app shell, navigation, `AppContainer` wiring; synthesized demo fallback (§7.5) so everyone can test early; Debug Settings (§8); permission screens + error handling UI (§9); PRD owner / integrator. |
 | **All (day 1)** | — | Agree and freeze Domain entities + repository protocols (§6.2–6.3) before parallel work starts. Changes after that go through a quick team review. |
 
