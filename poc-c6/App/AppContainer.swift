@@ -102,7 +102,8 @@ final class AppContainer {
             stemSeparation: SelectingStemSeparationRepository(
                 coreML: CoreMLStemSeparationRepository(),
                 centerChannel: CenterChannelStemRepository(),
-                useCoreML: { store.load().useCoreMLSeparation }),
+                useCoreML: { store.load().useCoreMLSeparation },
+                htDemucs: HTDemucsStemSeparationRepository()),
             audioAnalysis: CrepeAnalysisRepository(),
             audioTransposition: AudioTranspositionRepositoryImpl(),
             vocalRange: VocalRangeRepositoryImpl(),

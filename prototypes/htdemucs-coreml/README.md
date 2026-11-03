@@ -40,4 +40,8 @@ $P leakage.py center umx_coreml htdemucs_torch_cpu htdemucs_mixed_CPU_AND_GPU
   `reduce_mean/sub/square/sqrt/real_div`, and `square` overflows float16. The `mixed` variant keeps
   that chain (plus softmax/attention/layer norm) in float32.
 - `freq_emb(...).expand_as(x)` gets folded into a 16 MB constant; a broadcast add avoids it.
+- With float16 compute precision coremltools also makes the model's inputs/outputs float16;
+  `phase2_convert.py` declares them float32 (the app's Swift code expects float32).
 - Compute units matter: see the report for which ones are accurate.
+- The app's Swift port (`DemucsSpectrogram`, `HTDemucsStemSeparationRepository`) matches
+  `core.py` + CoreML at 67 dB SNR on the test clip.

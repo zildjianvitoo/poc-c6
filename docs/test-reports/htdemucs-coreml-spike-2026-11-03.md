@@ -1,6 +1,6 @@
-# Spike htdemucs → CoreML (Fase 0–3, Mac) — 3 November 2026
+# Spike htdemucs → CoreML (Fase 0–4, Mac) — 3 November 2026
 
-**Kesimpulan: konversi BERHASIL dan layak lanjut ke integrasi Swift (Fase 4).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
+**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Belum dites di iPhone (Fase 5).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
 
 Angka di iPhone belum ada. Semua angka di sini dari Mac M5 (RAM 24 GB). Script ada di `prototypes/htdemucs-coreml/`.
 
@@ -28,6 +28,7 @@ Fase 1: bungkus model tanpa STFT identik bit-per-bit dengan htdemucs asli pada s
 | int8out (int8, bobot kecil termasuk layer output tetap fp16) | 43 MB | CPU+GPU | 1,93 s | 1.475 MB | 36,4 dB | 0,7% |
 | pal8 (palettization 8-bit k-means) | 43 MB | CPU+GPU | 1,62 s | 1.377 MB | 31,0 dB | 0,7% |
 | **int8tr** (int8 hanya di cross-transformer) | **58 MB** | **CPU+GPU** | **1,84 s** | 1.395 MB | **59,1 dB** | **0,7%** |
+| int8tr | 58 MB | CPU saja | 4,74 s | 1.623 MB | 36,6 dB (instrumental 28,8 dB) | 0,7% |
 | fp32 | 169 MB | CPU+GPU | 3,50 s | 1.452 MB | 127 dB | 0,7% |
 | fp32 | 169 MB | CPU+NE (jalan di CPU) | 6,43 s | 1.703 MB | 106 dB | 0,7% |
 
@@ -39,6 +40,8 @@ Fase 1: bungkus model tanpa STFT identik bit-per-bit dengan htdemucs asli pada s
 | Center-channel (cadangan) | 62,9% | ~0 s |
 | Open-Unmix CoreML (app sekarang) | 4,9% | 0,45 s |
 | htdemucs CoreML mixed/int8 | **0,7%** | 1,6–2,0 s |
+
+Varian int8tr di app dikonversi ulang dengan I/O Float32 (SNR 59,5 dB, 1,88 s). Hasilnya praktis sama.
 
 Metrik kebocoran: CREPE tiny (model app, keyakinan ≥ 0,5) menghitung persentase frame melodi vokal yang nadanya masih ada di stem instrumental (±50 cent). Melodi diambil dari vokal htdemucs PyTorch. Dicek juga dengan melodi dari vokal masing-masing metode, dan hasilnya sama. Angkanya berbeda dari laporan spike Open-Unmix (65% / 12%) karena definisi frame-nya berbeda. Yang bisa dibandingkan hanya angka di dalam satu tabel ini.
 
@@ -55,11 +58,32 @@ Metrik kebocoran: CREPE tiny (model app, keyakinan ≥ 0,5) menghitung persentas
 ## 5. Rekomendasi
 - **Tes dengar (Zildjian, 3 Nov):** kualitas pemisahan mixed dan int8 sama, tapi **int8 menambah hiss sepanjang lagu**. Hiss ini cocok dengan SNR int8 yang hanya ~34 dB. Kuantisasi 8-bit di seluruh model (int8, int8out, pal8) memberi SNR 31–36 dB, jadi hiss-nya kemungkinan muncul juga di ketiganya.
 - **Lanjut ke Fase 4 dengan varian int8tr (58 MB, `.cpuAndGPU`).** Cross-transformer memegang 75% parameter dan bekerja di resolusi rendah, di tengah jaringan. Hanya bagian ini yang dibuat int8, sedangkan layer encoder dan decoder yang menyentuh audio langsung tetap fp16. Hasilnya SNR 59 dB, mendekati mixed (64,6 dB). Hiss-nya **perlu dikonfirmasi dengan didengar** (`local-songs/htdemucs-listen/5-*`). Kalau masih terdengar, pakai mixed (85 MB).
-- Model baru masuk `poc-c6/Resources/` saat integrasi Fase 4, bukan sekarang.
+- **Tes dengar (Zildjian, 3 Nov):** int8tr dipilih.
 - Open-Unmix tetap ada sebagai cadangan pertama, center-channel sebagai cadangan kedua.
 
-## 6. Belum diukur / risiko
-- **Waktu dan memori di iPhone 15 Pro** (Fase 5). Di Mac M5 GPU-nya 1,6–2,0 s. GPU iPhone jauh lebih lemah, tapi target PRD (< 30 s untuk 60 s) kemungkinan masih jauh di atas. Memori puncak harus dicek lewat Xcode Debug Navigator.
-- **Implementasi Swift** untuk STFT ala demucs (normalized, padding tambahan, bin terakhir dibuang), iSTFT, dan chunking. Semua bisa dicek terhadap `core.py` dengan selisih yang terukur.
-- Kualitas belum didengar manusia. Ukuran kualitasnya baru objektif (kebocoran melodi dan SNR).
+## 6. Integrasi di app (Fase 4)
+| | |
+|---|---|
+| Model | `poc-c6/Resources/HTDemucs.mlpackage` (int8tr, I/O Float32), lisensi `Licenses/Demucs-LICENSE.txt`. App Debug untuk Simulator: 24 → 86 MB |
+| Kode | `DemucsSpectrogram` (STFT/iSTFT ala demucs, di atas `ShortTimeFourierTransform`), `HTDemucsStemSeparationRepository` (chunking 7,8 s, overlap 25%, bobot segitiga, vokal = `vocals`, instrumental = drums + bass + other) |
+| Urutan | `SelectingStemSeparationRepository`: htdemucs → Open-Unmix → center-channel, semuanya di bawah flag `useCoreMLSeparation` yang sudah ada. Tidak ada flag baru (flag baru berarti mengubah kontrak `PoCConfiguration`) |
+| `SeparatedStems.method` | Tetap `.coreML` (tanpa mengubah kontrak), jadi layar Ready tidak membedakan htdemucs dari Open-Unmix |
+
+**Verifikasi di Mac (harness sementara yang mengompilasi file Swift app):**
+| Ukuran | Hasil |
+|---|---|
+| Swift vs Python CoreML (model sama) | SNR vokal 67,1 dB, instrumental 61,1 dB, jadi implementasinya cocok |
+| Swift vs PyTorch htdemucs | vokal 59,4 dB, instrumental 53,7 dB (sama dengan Python CoreML) |
+| Waktu 60 s (Swift, `-O`, GPU M5) | 2,3 s |
+| Ujung ke ujung `separateStems` (mp3, trim 30 s) lewat rantai Selecting | jalan, metode `.coreML` |
+| **Peak memory footprint** satu proses (model dimuat sekali) | **≈ 2,0 GB** (RSS 0,94 GB; selisihnya kemungkinan memori GPU) |
+| `xcodebuild` Simulator, `scripts/check-prep.sh` | lulus (check-prep belum mencakup htdemucs) |
+
+Percobaan yang tidak menolong: attention, softmax, dan layer norm di fp16 (hanya rantai GroupNorm yang fp32). Footprint tetap 2,0 GB dan waktunya justru 3,2 s, jadi tidak dipakai.
+
+## 7. Belum diukur / risiko
+- **Memori di iPhone 15 Pro adalah risiko terbesar.** Footprint di Mac sekitar 2,0 GB, sedangkan Open-Unmix sekitar 0,4 GB. Kalau iOS menghentikan app (jetsam), app ikut mati. Ini bukan error yang ditangkap rantai cadangan. Ukur lewat Xcode Debug Navigator → Memory saat Persiapan lagu 60 s.
+- **Waktu di iPhone** (Fase 5). Di Mac M5 sekitar 2,3 s. GPU iPhone lebih lemah, tapi target PRD (< 30 s untuk 60 s) kemungkinan tetap tercapai.
+- **Kalau Core ML menjalankan model di CPU** (Simulator, dan mungkin saat app di background), hasilnya tetap dipakai tapi lebih berisik: SNR 29–37 dB, level yang sama dengan hiss int8. Kebocoran tetap 0,7%. Cek di iPhone: keluar dari app saat Persiapan, lalu dengarkan hasilnya.
+- `scripts/check-prep.sh` belum mengecek htdemucs, karena perubahan di `scripts/` perlu izin.
 - Hanya satu lagu yang diuji.

@@ -145,9 +145,9 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
         }
     }
 
-    // MARK: - Audio files
+    // MARK: - Audio files (shared with HTDemucsStemSeparationRepository)
 
-    private static func readStereo(asset: AVAsset, track: AVAssetTrack, trim: ClosedRange<TimeInterval>) throws -> [[Float]] {
+    static func readStereo(asset: AVAsset, track: AVAssetTrack, trim: ClosedRange<TimeInterval>) throws -> [[Float]] {
         guard let reader = try? AVAssetReader(asset: asset) else { throw CoreMLSeparationError.unreadable }
         reader.timeRange = CMTimeRange(start: CMTime(seconds: trim.lowerBound, preferredTimescale: 44_100),
                                        end: CMTime(seconds: trim.upperBound, preferredTimescale: 44_100))
@@ -176,7 +176,7 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
         }
     }
 
-    private static func write(_ channels: [[Float]], to url: URL) throws {
+    static func write(_ channels: [[Float]], to url: URL) throws {
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: AVAudioChannelCount(channels.count)),
               let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(channels[0].count)) else {
             throw CoreMLSeparationError.unreadable
@@ -189,7 +189,7 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
         try AVAudioFile(forWriting: url, settings: format.settings).write(from: buffer)
     }
 
-    private static func cacheKey(_ url: URL, _ trim: ClosedRange<TimeInterval>) -> String {
+    static func cacheKey(_ url: URL, _ trim: ClosedRange<TimeInterval>) -> String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)?.timeIntervalSince1970 ?? 0
         var hash: UInt64 = 0xcbf29ce484222325
         for byte in "\(url.path)|\(modified)|\(trim.lowerBound)|\(trim.upperBound)".utf8 {

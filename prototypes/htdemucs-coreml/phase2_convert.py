@@ -57,8 +57,11 @@ if __name__ == "__main__":
     t0 = time.perf_counter()
     ml = ct.convert(
         traced,
-        inputs=[ct.TensorType(name="mix", shape=mix.shape), ct.TensorType(name="spec", shape=spec.shape)],
-        outputs=[ct.TensorType(name="spec_out"), ct.TensorType(name="wave_out")],
+        # Float32 I/O: with float16 compute precision coremltools would otherwise make the inputs
+        # and outputs float16 too, and the quiet STFT bins (~1e-5) lose precision.
+        inputs=[ct.TensorType(name="mix", shape=mix.shape, dtype=np.float32),
+                ct.TensorType(name="spec", shape=spec.shape, dtype=np.float32)],
+        outputs=[ct.TensorType(name="spec_out", dtype=np.float32), ct.TensorType(name="wave_out", dtype=np.float32)],
         convert_to="mlprogram",
         compute_precision=precision("mixed" if variant in ("int8", "int8out", "int8tr", "pal8") else variant),
         minimum_deployment_target=ct.target.iOS18,
