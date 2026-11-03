@@ -37,11 +37,12 @@ final class ImportSongViewModel {
     @ObservationIgnored private let inspector: any AudioFileInspecting
     @ObservationIgnored private let prepare: PrepareSongUseCase
     @ObservationIgnored private let vocalRange: () -> VocalRange?
-    @ObservationIgnored private let onPrepared: (PreparedSong) -> Void
+    /// The prepared song and its stems before transposition.
+    @ObservationIgnored private let onPrepared: (PreparedSong, SeparatedStems) -> Void
     @ObservationIgnored private var preparation: Task<Void, Never>?
 
     init(inspector: any AudioFileInspecting, prepare: PrepareSongUseCase,
-         vocalRange: @escaping () -> VocalRange?, onPrepared: @escaping (PreparedSong) -> Void) {
+         vocalRange: @escaping () -> VocalRange?, onPrepared: @escaping (PreparedSong, SeparatedStems) -> Void) {
         self.inspector = inspector
         self.prepare = prepare
         self.vocalRange = vocalRange
@@ -86,13 +87,13 @@ final class ImportSongViewModel {
         status = .preparing(step: "Starting…")
         preparation = Task { [prepare] in
             do {
-                let song = try await prepare.execute(audioURL: audio.url, trimRange: trim, vocalRange: range) { step in
+                let (song, stems) = try await prepare.executeReturningStems(audioURL: audio.url, trimRange: trim, vocalRange: range) { step in
                     Task { @MainActor in
                         if case .preparing = self.status { self.status = .preparing(step: step) }
                     }
                 }
                 try Task.checkCancellation()
-                onPrepared(song)
+                onPrepared(song, stems)
             } catch is CancellationError {
                 status = .trimming(audio)
             } catch {

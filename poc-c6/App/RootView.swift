@@ -33,7 +33,7 @@ struct RootView: View {
                 }
             case .ready:
                 if let song = flow.preparedSong {
-                    ReadyView(song: song, previewer: flow.container.audioPreview,
+                    ReadyView(song: song, originalKeyStems: flow.separatedStems, previewer: flow.container.audioPreview,
                               routeMonitor: flow.container.audioRoute,
                               allowsSpeaker: DebugOptions.allowsSpeakerRecording,
                               onRecord: flow.startRecording, onChooseAnother: flow.startOver)
@@ -100,7 +100,7 @@ struct RootView: View {
                                         transposition: container.audioTransposition,
                                         configuration: container.configuration),
             vocalRange: { container.vocalRange.load() },
-            onPrepared: flow.songPrepared)
+            onPrepared: { flow.songPrepared($0, stems: $1) })
     }
 
     private func makeRecordingViewModel(song: PreparedSong) -> RecordingViewModel {

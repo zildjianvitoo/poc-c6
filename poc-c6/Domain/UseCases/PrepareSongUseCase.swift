@@ -15,6 +15,15 @@ nonisolated struct PrepareSongUseCase: Sendable {
 
     func execute(audioURL: URL, trimRange: ClosedRange<TimeInterval>, vocalRange: VocalRange,
                  progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> PreparedSong {
+        try await executeReturningStems(audioURL: audioURL, trimRange: trimRange, vocalRange: vocalRange,
+                                        progress: progress).song
+    }
+
+    /// Same as `execute`, plus the separated stems before transposition (the Ready screen plays
+    /// them in the original key).
+    func executeReturningStems(audioURL: URL, trimRange: ClosedRange<TimeInterval>, vocalRange: VocalRange,
+                               progress: @escaping @Sendable (String) -> Void = { _ in }) async throws
+        -> (song: PreparedSong, stems: SeparatedStems) {
         guard trimRange.lowerBound.isFinite, trimRange.upperBound.isFinite,
               trimRange.lowerBound >= 0, trimRange.upperBound > trimRange.lowerBound else {
             throw ContractViolation(contract: "Preparation", message: "Invalid trim range.")
@@ -56,6 +65,6 @@ nonisolated struct PrepareSongUseCase: Sendable {
                                 transposition: plan, duration: duration, separationMethod: stems.method)
         if let violation = song.validate().first { throw violation }
         progress("Ready")
-        return song
+        return (song, stems)
     }
 }

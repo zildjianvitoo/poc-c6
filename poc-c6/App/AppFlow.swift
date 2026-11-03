@@ -23,6 +23,8 @@ final class AppFlow {
     let container: AppContainer
     private(set) var step: Step
     private(set) var preparedSong: PreparedSong?
+    /// Stems of `preparedSong` before transposition; nil for the synthesized demo.
+    private(set) var separatedStems: SeparatedStems?
     private(set) var compingPlan: CompingCompositionPlan?
 
     init(container: AppContainer) {
@@ -38,9 +40,10 @@ final class AppFlow {
     }
 
     /// Import/prep screen (Ikzaz) finished preparing a song.
-    func songPrepared(_ song: PreparedSong) {
+    func songPrepared(_ song: PreparedSong, stems: SeparatedStems? = nil) {
         Contract.assertValid(song.validate())
         preparedSong = song
+        separatedStems = stems
         step = .ready
     }
 
@@ -83,6 +86,7 @@ final class AppFlow {
 
     func startOver() {
         preparedSong = nil
+        separatedStems = nil
         compingPlan = nil
         container.takeLog.clear()
         step = .importSong

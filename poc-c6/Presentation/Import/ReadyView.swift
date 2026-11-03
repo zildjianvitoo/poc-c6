@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ReadyView: View {
     let song: PreparedSong
+    /// The separated stems before transposition, to compare with the rehearsal key.
+    var originalKeyStems: SeparatedStems? = nil
     let previewer: any AudioPreviewing
     let routeMonitor: any AudioRouteMonitor
     /// Debug speaker test (DebugOptions) lets Record through without earphones.
@@ -18,7 +20,7 @@ struct ReadyView: View {
     @State private var playing: Track?
     @State private var route: AudioOutputRoute?
 
-    enum Track { case instrumental, original }
+    enum Track { case instrumental, original, originalKeyInstrumental, originalKeyMix }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -75,8 +77,26 @@ struct ReadyView: View {
         allowsSpeaker || (route ?? routeMonitor.currentRoute).allowsRecording
     }
 
-    /// Listen to the background music alone (what ends up in the cover) or the original.
+    /// Listen to the background music alone (what ends up in the cover) or the original, in the
+    /// rehearsal key and, when the song was transposed, in the original key.
+    @ViewBuilder
     private var previewButtons: some View {
+        if let stems = originalKeyStems, song.transposition.semitoneShift != 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Rehearsal key").font(.caption).foregroundStyle(.secondary)
+                rehearsalKeyButtons
+                Text("Original key").font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 12) {
+                    previewButton("Background", systemImage: "music.note", track: .originalKeyInstrumental, url: stems.instrumentalURL)
+                    previewButton("Original", systemImage: "music.mic", track: .originalKeyMix, url: stems.mixURL)
+                }
+            }
+        } else {
+            rehearsalKeyButtons
+        }
+    }
+
+    private var rehearsalKeyButtons: some View {
         HStack(spacing: 12) {
             previewButton("Background", systemImage: "music.note", track: .instrumental, url: song.instrumentalURL)
             previewButton("Original", systemImage: "music.mic", track: .original, url: song.earphoneMixURL)
