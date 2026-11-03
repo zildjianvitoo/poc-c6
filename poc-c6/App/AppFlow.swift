@@ -15,6 +15,7 @@ final class AppFlow {
     enum Step: Equatable {
         case vocalRange
         case importSong
+        case chooseKey
         case ready
         case recording
         case export
@@ -23,6 +24,9 @@ final class AppFlow {
     let container: AppContainer
     private(set) var step: Step
     private(set) var preparedSong: PreparedSong?
+    private(set) var keyChoices: PrepareSongUseCase.Choices?
+    private(set) var preparationError: UserFacingError?
+    private(set) var loadingDemo = false
     private(set) var compingPlan: CompingCompositionPlan?
 
     init(container: AppContainer) {
@@ -44,17 +48,37 @@ final class AppFlow {
         step = .ready
     }
 
-    /// Loads the synthesized demo song (ZV-06), transposed to the user's vocal range (PRD §5.4),
-    /// and continues as if it was imported.
+    func changeKey() {
+        guard keyChoices != nil else { return }
+        container.audioPreview.stop()
+        step = .chooseKey
+    }
+
+    func keysPrepared(_ choices: PrepareSongUseCase.Choices) {
+        choices.options.forEach { Contract.assertValid($0.song.validate()) }
+        keyChoices = choices
+        preparedSong = nil
+        preparationError = nil
+        step = .chooseKey
+    }
+
+    /// The demo uses its known melody, then follows the same key-choice flow as imports.
     func loadDemoSong() async {
+        guard !loadingDemo, let range = container.vocalRange.load() else { return }
+        loadingDemo = true
+        preparationError = nil
+        defer { loadingDemo = false }
         do {
-            let notes = container.demo.segments.flatMap(\.targetNotes)
-            let plan = try container.vocalRange.load().map {
-                try ComputeTranspositionUseCase().execute(notes: notes, vocalRange: $0)
-            } ?? .none
-            songPrepared(try await container.demo.preparedSong(transposition: plan))
+            let demo = container.demo
+            let stems = try await demo.separateStems(from: URL(fileURLWithPath: "/demo"), trimRange: 0...demo.duration)
+            let prepare = PrepareSongUseCase(separation: demo, analysis: container.audioAnalysis,
+                fallbackAnalysis: nil, transposition: container.audioTransposition, configuration: container.configuration)
+            let choices = try await prepare.makeChoices(stems: stems, notes: demo.segments.flatMap(\.targetNotes),
+                                                        duration: demo.duration, vocalRange: range)
+            guard step == .importSong else { return }
+            keysPrepared(choices)
         } catch {
-            assertionFailure("Synthesized demo failed: \(error)")
+            preparationError = .keyPreparationFailed
         }
     }
 
@@ -82,6 +106,8 @@ final class AppFlow {
     }
 
     func startOver() {
+        keyChoices = nil
+        preparationError = nil
         preparedSong = nil
         compingPlan = nil
         container.takeLog.clear()
@@ -89,6 +115,9 @@ final class AppFlow {
     }
 
     func retestVocalRange() {
+        container.audioPreview.stop()
+        keyChoices = nil
+        preparedSong = nil
         step = .vocalRange
     }
 

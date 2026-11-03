@@ -2,7 +2,7 @@
 //  VocalRangeTestView.swift
 //  poc-c6
 //
-//  Vocal range test screen (PRD §5.1): two prompts, live note readout, retry per prompt.
+//  Speaking baseline, comfortable limits and repeated sung confirmation.
 //
 
 import SwiftUI
@@ -15,14 +15,16 @@ struct VocalRangeTestView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
-            header
-            Spacer()
-            noteReadout
-            Spacer()
-            actions
+        ScrollView {
+            VStack(spacing: 24) {
+                header
+                Spacer()
+                noteReadout
+                Spacer()
+                actions
+            }
+            .padding()
         }
-        .padding()
         .onDisappear { viewModel.stopListening() }
     }
 
@@ -30,10 +32,15 @@ struct VocalRangeTestView: View {
         VStack(spacing: 8) {
             Text("Vocal Range Test")
                 .font(.largeTitle.bold())
-            Text("Step \(viewModel.prompt == .lowest ? 1 : 2) of 2")
+            Text("Step \(viewModel.prompt.rawValue + 1) of \(VocalRangeViewModel.Prompt.allCases.count)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("We'll fit the song to your voice. Sing an easy \"ah\" and hold it for about 2 seconds. Don't strain.")
+            if let baseline = viewModel.baselineMIDI, viewModel.prompt != .speaking {
+                Text("Speaking note: \(name(baseline)) · starting point only")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Text(viewModel.instructions)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -63,13 +70,13 @@ struct VocalRangeTestView: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
                 ProgressView(value: viewModel.holdProgress) {
-                    Text(viewModel.liveNoteName == nil ? "Listening…" : "Hold it…")
+                    Text(viewModel.prompt == .speaking ? "Keep reading naturally…" : (viewModel.liveNoteName == nil ? "Listening…" : "Hold it…"))
                         .font(.footnote)
                 }
                 .frame(maxWidth: 240)
             }
         case .captured(let note):
-            result(title: "Lowest note", note: note)
+            result(title: viewModel.prompt == .speaking ? "Speaking note" : "Note captured", note: note)
         case .finished(let range):
             VStack(spacing: 12) {
                 Image(systemName: "checkmark.circle.fill")
@@ -80,8 +87,8 @@ struct VocalRangeTestView: View {
                 Text("\(name(range.lowestMIDI)) – \(name(range.highestMIDI))")
                     .font(.system(size: 48, weight: .bold, design: .rounded))
             }
-        case .failed(let message):
-            ContentUnavailableView("Let's try that again", systemImage: "mic.badge.xmark", description: Text(message))
+        case .failed(let error):
+            ErrorStateView(error: error)
         }
     }
 
@@ -99,7 +106,7 @@ struct VocalRangeTestView: View {
                     viewModel.restart()
                 }
             case .captured:
-                Button("Next: Highest Note") { viewModel.next() }
+                Button(viewModel.nextTitle) { viewModel.next() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 Button("Retry") { viewModel.listen() }
@@ -136,6 +143,6 @@ struct VocalRangeTestView: View {
 
 #Preview {
     VocalRangeTestView(viewModel: VocalRangeViewModel(
-        source: FakeLivePitchSource(), repository: FakeVocalRangeRepository(),
+        source: FakeLivePitchSource(notes: [57, 48, 48, 67, 67]), repository: FakeVocalRangeRepository(),
         configuration: .default, onSaved: {}))
 }

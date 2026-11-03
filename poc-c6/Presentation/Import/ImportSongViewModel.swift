@@ -37,11 +37,12 @@ final class ImportSongViewModel {
     @ObservationIgnored private let inspector: any AudioFileInspecting
     @ObservationIgnored private let prepare: PrepareSongUseCase
     @ObservationIgnored private let vocalRange: () -> VocalRange?
-    @ObservationIgnored private let onPrepared: (PreparedSong) -> Void
+    @ObservationIgnored private let onPrepared: (PrepareSongUseCase.Choices) -> Void
     @ObservationIgnored private var preparation: Task<Void, Never>?
+    @ObservationIgnored private var generation = UUID()
 
     init(inspector: any AudioFileInspecting, prepare: PrepareSongUseCase,
-         vocalRange: @escaping () -> VocalRange?, onPrepared: @escaping (PreparedSong) -> Void) {
+         vocalRange: @escaping () -> VocalRange?, onPrepared: @escaping (PrepareSongUseCase.Choices) -> Void) {
         self.inspector = inspector
         self.prepare = prepare
         self.vocalRange = vocalRange
@@ -84,18 +85,22 @@ final class ImportSongViewModel {
         guard let audio, let range = vocalRange() else { return }
         let trim = selectionStart...(selectionStart + selectionLength)
         status = .preparing(step: "Starting…")
+        let token = generation
         preparation = Task { [prepare] in
             do {
-                let song = try await prepare.execute(audioURL: audio.url, trimRange: trim, vocalRange: range) { step in
+                let song = try await prepare.executeChoices(audioURL: audio.url, trimRange: trim, vocalRange: range) { step in
                     Task { @MainActor in
-                        if case .preparing = self.status { self.status = .preparing(step: step) }
+                        if self.generation == token, case .preparing = self.status { self.status = .preparing(step: step) }
                     }
                 }
                 try Task.checkCancellation()
+                guard generation == token else { return }
                 onPrepared(song)
             } catch is CancellationError {
+                guard generation == token else { return }
                 status = .trimming(audio)
             } catch {
+                guard generation == token else { return }
                 status = .failed(Self.userFacing(error))
             }
         }
@@ -108,6 +113,7 @@ final class ImportSongViewModel {
 
     func reset() {
         cancelPreparation()
+        generation = UUID()
         status = .idle
     }
 
@@ -128,7 +134,7 @@ final class ImportSongViewModel {
             return .noVocalDetected
         case let violation as ContractViolation where violation.message.contains("guide notes"):
             return .noVocalDetected
-        default: return .unreadableFile
+        default: return .keyPreparationFailed
         }
     }
 }

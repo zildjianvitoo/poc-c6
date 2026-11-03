@@ -45,6 +45,7 @@ struct ImportSongView: View {
         }
         .padding()
         .fileImporter(isPresented: $picking, allowedContentTypes: Self.types) { viewModel.picked($0) }
+        .onDisappear { viewModel.cancelPreparation() }
     }
 
     private var picker: some View {

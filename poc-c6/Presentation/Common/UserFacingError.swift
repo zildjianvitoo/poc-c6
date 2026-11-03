@@ -21,6 +21,11 @@ nonisolated enum UserFacingError: Equatable, Sendable {
     case recordingFailed(details: String)
     case recordingInterrupted
     case nothingToExport
+    case vocalRangeCaptureFailed
+    case vocalRangeConfirmationFailed
+    case vocalRangeTooNarrow
+    case keyPreviewFailed
+    case keyPreparationFailed
 
     var title: String {
         switch self {
@@ -37,6 +42,11 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .recordingFailed: "Recording stopped"
         case .recordingInterrupted: "Recording was interrupted"
         case .nothingToExport: "Nothing to export yet"
+        case .vocalRangeCaptureFailed: "We couldn't capture your voice"
+        case .vocalRangeConfirmationFailed: "Let's confirm that note again"
+        case .vocalRangeTooNarrow: "Try a higher comfortable note"
+        case .keyPreviewFailed: "The preview couldn't play"
+        case .keyPreparationFailed: "The keys couldn't be prepared"
         }
     }
 
@@ -67,6 +77,16 @@ nonisolated enum UserFacingError: Equatable, Sendable {
             "A call, another app or unplugged earphones stopped the session. Your passed segments are saved."
         case .nothingToExport:
             "Pass at least one segment to make a cover."
+        case .vocalRangeCaptureFailed:
+            "Try again in a quiet place. Speak naturally for the reading, and hold each sung note steadily without straining."
+        case .vocalRangeConfirmationFailed:
+            "Sing the same comfortable note again. If it feels strained, start over with a smaller range."
+        case .vocalRangeTooNarrow:
+            "Your highest note must be above your lowest note. Stay comfortable and don't force your voice."
+        case .keyPreviewFailed:
+            "Try listening again. If playback still fails, prepare the song again."
+        case .keyPreparationFailed:
+            "Try preparing the song again or choose another section."
         }
     }
 
@@ -84,6 +104,9 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .recordingFailed: "video.slash"
         case .recordingInterrupted: "pause.circle"
         case .nothingToExport: "film.stack"
+        case .vocalRangeCaptureFailed, .vocalRangeConfirmationFailed, .vocalRangeTooNarrow: "mic.badge.xmark"
+        case .keyPreviewFailed: "speaker.slash"
+        case .keyPreparationFailed: "music.note.list"
         }
     }
 

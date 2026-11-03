@@ -28,15 +28,30 @@ struct RootView: View {
                         onSaved: flow.vocalRangeSaved))
                 }
             case .importSong:
-                ImportSongView(viewModel: makeImportViewModel()) {
-                    Task { await flow.loadDemoSong() }
+                VStack {
+                    if let error = flow.preparationError { ErrorStateView(error: error) }
+                    if flow.loadingDemo {
+                        ProgressView("Preparing demo keys…")
+                    } else {
+                        ImportSongView(viewModel: makeImportViewModel()) {
+                            Task { await flow.loadDemoSong() }
+                        }
+                    }
+                }
+            case .chooseKey:
+                if let choices = flow.keyChoices {
+                    KeySelectionView(viewModel: KeySelectionViewModel(
+                        choices: choices, previewer: flow.container.audioPreview,
+                        onChoose: flow.songPrepared), routeMonitor: flow.container.audioRoute,
+                        onChooseAnother: flow.startOver, onRetest: flow.retestVocalRange)
                 }
             case .ready:
                 if let song = flow.preparedSong {
                     ReadyView(song: song, previewer: flow.container.audioPreview,
                               routeMonitor: flow.container.audioRoute,
                               allowsSpeaker: DebugOptions.allowsSpeakerRecording,
-                              onRecord: flow.startRecording, onChooseAnother: flow.startOver)
+                              onRecord: flow.startRecording, onChooseAnother: flow.startOver,
+                              onChangeKey: flow.changeKey)
                 }
             case .recording:
                 PermissionGate([.camera, .microphone], provider: flow.container.permissions) {
@@ -100,7 +115,7 @@ struct RootView: View {
                                         transposition: container.audioTransposition,
                                         configuration: container.configuration),
             vocalRange: { container.vocalRange.load() },
-            onPrepared: flow.songPrepared)
+            onPrepared: flow.keysPrepared)
     }
 
     private func makeRecordingViewModel(song: PreparedSong) -> RecordingViewModel {
