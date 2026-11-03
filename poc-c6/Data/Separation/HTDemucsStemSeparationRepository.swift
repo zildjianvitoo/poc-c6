@@ -126,76 +126,80 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
         var chunks = 0
 
         for offset in Swift.stride(from: 0, to: length, by: stride) {
-            // demucs TensorChunk.padded: a short last chunk is centred, with real audio as context.
-            let count = min(segment, length - offset)
-            let trim = (segment - count) / 2
-            let start = offset - trim
-            let inputStarted = clock.now
-            let lo = max(0, start), hi = min(length, start + segment)
-            let window = channels.map { channel in
-                var samples = [Float](repeating: 0, count: segment)
-                samples.replaceSubrange((lo - start)..<(hi - start), with: channel[lo..<hi])
-                return samples
-            }
-            let mixPointer = mixInput.dataPointer.bindMemory(to: Float.self, capacity: mixInput.count)
-            let specPointer = specInput.dataPointer.bindMemory(to: Float.self, capacity: specInput.count)
-            for c in 0..<2 {
-                copy(window[c], to: mixPointer + c * mixStrides[1], stride: mixStrides[2])
-                // Complex as channels: [L real, L imaginary, R real, R imaginary], each (bin, frame).
-                let spectra = spectrogram.forward(window[c])
-                writePlane(frameMajor(spectra.map(\.real), bins: bins), to: specPointer + (2 * c) * specStrides[1],
-                           binStride: specStrides[2], frameStride: specStrides[3], bins: bins, frames: frames)
-                writePlane(frameMajor(spectra.map(\.imaginary), bins: bins), to: specPointer + (2 * c + 1) * specStrides[1],
-                           binStride: specStrides[2], frameStride: specStrides[3], bins: bins, frames: frames)
-            }
-
-            let modelStarted = clock.now
-            inputTime += modelStarted - inputStarted
-            let prediction = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["mix": mixInput, "spec": specInput]))
-            let outputStarted = clock.now
-            modelTime += outputStarted - modelStarted
-            chunks += 1
-            guard let specOut = prediction.featureValue(for: "spec_out")?.multiArrayValue,
-                  let waveOut = prediction.featureValue(for: "wave_out")?.multiArrayValue,
-                  specOut.dataType == .float32, waveOut.dataType == .float32 else {
-                throw CoreMLSeparationError.modelUnavailable
-            }
-            let so = specOut.strides.map(\.intValue)
-            let wo = waveOut.strides.map(\.intValue)
-            let specValues = UnsafePointer(specOut.dataPointer.bindMemory(to: Float.self, capacity: specOut.count))
-            let waveValues = UnsafePointer(waveOut.dataPointer.bindMemory(to: Float.self, capacity: waveOut.count))
-
-            total.withUnsafeMutableBufferPointer {
-                vDSP_vadd(weight, 1, $0.baseAddress! + offset, 1, $0.baseAddress! + offset, 1, vDSP_Length(count))
-            }
-            for (target, sourceIndices) in targets.enumerated() {
+            // Free each chunk's CoreML buffers right away; otherwise they pile up until the loop ends
+            // (7 GB for a 4.6 min song).
+            try autoreleasepool {
+                // demucs TensorChunk.padded: a short last chunk is centred, with real audio as context.
+                let count = min(segment, length - offset)
+                let trim = (segment - count) / 2
+                let start = offset - trim
+                let inputStarted = clock.now
+                let lo = max(0, start), hi = min(length, start + segment)
+                let window = channels.map { channel in
+                    var samples = [Float](repeating: 0, count: segment)
+                    samples.replaceSubrange((lo - start)..<(hi - start), with: channel[lo..<hi])
+                    return samples
+                }
+                let mixPointer = mixInput.dataPointer.bindMemory(to: Float.self, capacity: mixInput.count)
+                let specPointer = specInput.dataPointer.bindMemory(to: Float.self, capacity: specInput.count)
                 for c in 0..<2 {
-                    // Sum the target's sources first: iSTFT is linear, so one inverse per target.
-                    func summed(_ part: Int) -> [Float] {
-                        sourceIndices.map { s in
-                            readPlane(specValues + (s * 4 + 2 * c + part) * so[1], binStride: so[2], frameStride: so[3],
-                                      bins: bins, frames: frames)
-                        }.reduce([Float](repeating: 0, count: bins * frames)) { vDSP.add($0, $1) }
-                    }
-                    let real = summed(0), imaginary = summed(1)
-                    let spectra = (0..<frames).map { t in
-                        ShortTimeFourierTransform.Spectrum(real: Array(real[(t * bins)..<((t + 1) * bins)]) + [0],
-                                                           imaginary: Array(imaginary[(t * bins)..<((t + 1) * bins)]) + [0])
-                    }
-                    // Frequency branch + the sources' time branch, then weighted into the output.
-                    var chunk = Array(spectrogram.inverse(spectra, length: segment)[trim..<(trim + count)])
-                    chunk.withUnsafeMutableBufferPointer { samples in
-                        for s in sourceIndices {
-                            vDSP_vadd(samples.baseAddress!, 1, waveValues + (s * 2 + c) * wo[1] + trim * wo[2], vDSP_Stride(wo[2]),
-                                      samples.baseAddress!, 1, vDSP_Length(count))
+                    copy(window[c], to: mixPointer + c * mixStrides[1], stride: mixStrides[2])
+                    // Complex as channels: [L real, L imaginary, R real, R imaginary], each (bin, frame).
+                    let spectra = spectrogram.forward(window[c])
+                    writePlane(frameMajor(spectra.map(\.real), bins: bins), to: specPointer + (2 * c) * specStrides[1],
+                               binStride: specStrides[2], frameStride: specStrides[3], bins: bins, frames: frames)
+                    writePlane(frameMajor(spectra.map(\.imaginary), bins: bins), to: specPointer + (2 * c + 1) * specStrides[1],
+                               binStride: specStrides[2], frameStride: specStrides[3], bins: bins, frames: frames)
+                }
+
+                let modelStarted = clock.now
+                inputTime += modelStarted - inputStarted
+                let prediction = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["mix": mixInput, "spec": specInput]))
+                let outputStarted = clock.now
+                modelTime += outputStarted - modelStarted
+                chunks += 1
+                guard let specOut = prediction.featureValue(for: "spec_out")?.multiArrayValue,
+                      let waveOut = prediction.featureValue(for: "wave_out")?.multiArrayValue,
+                      specOut.dataType == .float32, waveOut.dataType == .float32 else {
+                    throw CoreMLSeparationError.modelUnavailable
+                }
+                let so = specOut.strides.map(\.intValue)
+                let wo = waveOut.strides.map(\.intValue)
+                let specValues = UnsafePointer(specOut.dataPointer.bindMemory(to: Float.self, capacity: specOut.count))
+                let waveValues = UnsafePointer(waveOut.dataPointer.bindMemory(to: Float.self, capacity: waveOut.count))
+
+                total.withUnsafeMutableBufferPointer {
+                    vDSP_vadd(weight, 1, $0.baseAddress! + offset, 1, $0.baseAddress! + offset, 1, vDSP_Length(count))
+                }
+                for (target, sourceIndices) in targets.enumerated() {
+                    for c in 0..<2 {
+                        // Sum the target's sources first: iSTFT is linear, so one inverse per target.
+                        func summed(_ part: Int) -> [Float] {
+                            sourceIndices.map { s in
+                                readPlane(specValues + (s * 4 + 2 * c + part) * so[1], binStride: so[2], frameStride: so[3],
+                                          bins: bins, frames: frames)
+                            }.reduce([Float](repeating: 0, count: bins * frames)) { vDSP.add($0, $1) }
+                        }
+                        let real = summed(0), imaginary = summed(1)
+                        let spectra = (0..<frames).map { t in
+                            ShortTimeFourierTransform.Spectrum(real: Array(real[(t * bins)..<((t + 1) * bins)]) + [0],
+                                                               imaginary: Array(imaginary[(t * bins)..<((t + 1) * bins)]) + [0])
+                        }
+                        // Frequency branch + the sources' time branch, then weighted into the output.
+                        var chunk = Array(spectrogram.inverse(spectra, length: segment)[trim..<(trim + count)])
+                        chunk.withUnsafeMutableBufferPointer { samples in
+                            for s in sourceIndices {
+                                vDSP_vadd(samples.baseAddress!, 1, waveValues + (s * 2 + c) * wo[1] + trim * wo[2], vDSP_Stride(wo[2]),
+                                          samples.baseAddress!, 1, vDSP_Length(count))
+                            }
+                        }
+                        output[target][c].withUnsafeMutableBufferPointer {
+                            vDSP_vma(chunk, 1, weight, 1, $0.baseAddress! + offset, 1, $0.baseAddress! + offset, 1, vDSP_Length(count))
                         }
                     }
-                    output[target][c].withUnsafeMutableBufferPointer {
-                        vDSP_vma(chunk, 1, weight, 1, $0.baseAddress! + offset, 1, $0.baseAddress! + offset, 1, vDSP_Length(count))
-                    }
                 }
+                outputTime += clock.now - outputStarted
             }
-            outputTime += clock.now - outputStarted
         }
         log.notice("""
             htdemucs timing: \(chunks) chunks, STFT + inputs \(inputTime / .seconds(1), format: .fixed(precision: 2)) s, \
