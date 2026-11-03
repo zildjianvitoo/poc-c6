@@ -1,6 +1,6 @@
-# Spike htdemucs → CoreML (Fase 0–4, Mac) — 3 November 2026
+# Spike htdemucs → CoreML (Fase 0–4 di Mac, Fase 5 awal di iPhone 17) — 3 November 2026
 
-**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Belum dites di iPhone (Fase 5).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
+**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Tes pertama di iPhone 17: memori aman (puncak ~1 GB), tapi waktunya perlu dicek ulang (§7).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
 
 Angka di iPhone belum ada. Semua angka di sini dari Mac M5 (RAM 24 GB). Script ada di `prototypes/htdemucs-coreml/`.
 
@@ -81,8 +81,27 @@ Metrik kebocoran: CREPE tiny (model app, keyakinan ≥ 0,5) menghitung persentas
 
 Percobaan yang tidak menolong: attention, softmax, dan layer norm di fp16 (hanya rantai GroupNorm yang fp32). Footprint tetap 2,0 GB dan waktunya justru 3,2 s, jadi tidak dipakai.
 
-## 7. Belum diukur / risiko
-- **Memori di iPhone 15 Pro adalah risiko terbesar.** Footprint di Mac sekitar 2,0 GB, sedangkan Open-Unmix sekitar 0,4 GB. Kalau iOS menghentikan app (jetsam), app ikut mati. Ini bukan error yang ditangkap rantai cadangan. Ukur lewat Xcode Debug Navigator → Memory saat Persiapan lagu 60 s.
-- **Waktu di iPhone** (Fase 5). Di Mac M5 sekitar 2,3 s. GPU iPhone lebih lemah, tapi target PRD (< 30 s untuk 60 s) kemungkinan tetap tercapai.
+## 7. Tes di iPhone 17 (Fase 5 awal, 3 Nov)
+Build Debug, dijalankan lewat `devicectl` dengan log `[Separation]` dari `LoggingStemSeparationRepository`. Ini lagu impor pertama setelah app dibuka.
+
+| | htdemucs, trim 30 s |
+|---|---|
+| Waktu `separateStems` | **20,4 s** |
+| Memory footprint | 47 → 597 MB, **puncak 1.012 MB** |
+| Sisa memori sebelum batas iOS (sebelum mulai) | 3.329 MB |
+| App mati karena memori? | Tidak (app ditutup manual setelahnya) |
+
+- **Memori aman.** Puncaknya sekitar 1 GB, dengan sisa sekitar 2,3 GB dari batas iOS. Angka ini lebih rendah dari Mac (2,0 GB).
+- **Waktu belum memenuhi target kalau dihitung linear.** 20,4 s untuk 30 s berarti kira-kira 40 s untuk 60 s, sedangkan target PRD di bawah 30 s. Angka ini **belum dipisah** antara tiga hal:
+  1. pemuatan dan kompilasi model GPU pertama kali,
+  2. DSP Swift (STFT/iSTFT dan loop array) yang di build **Debug** jalan tanpa optimasi compiler (di Mac dengan `-O`: total 2,3 s untuk 60 s),
+  3. inferensi model.
+  
+  Ketiganya perlu diukur terpisah sebelum memutuskan optimasi.
+- Belum diukur: lagu 60 s, run kedua saat model sudah termuat, perbandingan dengan Open-Unmix (toggle *Separate with htdemucs* di Debug Settings), build Release, dan app di background saat Persiapan.
+
+## 8. Belum diukur / risiko
+- **Waktu di iPhone** belum memenuhi target kalau dihitung linear (lihat §7). Penyebabnya belum dipisah.
+- Memori di iPhone 17 (8 GB) aman. iPhone dengan RAM 6 GB ke bawah belum dicoba.
 - **Kalau Core ML menjalankan model di CPU** (Simulator, dan mungkin saat app di background), hasilnya tetap dipakai tapi lebih berisik: SNR 29–37 dB, level yang sama dengan hiss int8. Kebocoran tetap 0,7%. Cek di iPhone: keluar dari app saat Persiapan, lalu dengarkan hasilnya.
 - Hanya satu lagu yang diuji.

@@ -17,12 +17,14 @@ nonisolated struct SelectingStemSeparationRepository: StemSeparationRepository {
     let useCoreML: @Sendable () -> Bool
     /// Tried before `coreML` (Open-Unmix) when set.
     var htDemucs: (any StemSeparationRepository)? = nil
+    /// Read on every call; off skips htdemucs (device A/B testing, DebugOptions.skipsHTDemucs).
+    var useHTDemucs: @Sendable () -> Bool = { true }
 
     func separateStems(from audioURL: URL, trimRange: ClosedRange<TimeInterval>) async throws -> SeparatedStems {
         guard useCoreML() else {
             return try await centerChannel.separateStems(from: audioURL, trimRange: trimRange)
         }
-        let models = [htDemucs, coreML].compactMap { $0 }
+        let models = [useHTDemucs() ? htDemucs : nil, coreML].compactMap { $0 }
         for model in models {
             do {
                 return try await model.separateStems(from: audioURL, trimRange: trimRange)

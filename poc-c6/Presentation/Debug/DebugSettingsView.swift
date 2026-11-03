@@ -11,6 +11,7 @@ struct DebugSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var configuration: PoCConfiguration
     @State private var allowsSpeakerRecording = DebugOptions.allowsSpeakerRecording
+    @State private var usesHTDemucs = !DebugOptions.skipsHTDemucs
     private let onSave: (PoCConfiguration) -> Void
     private let onRetestVocalRange: () -> Void
     private let onMeasureSync: () -> Void
@@ -64,6 +65,12 @@ struct DebugSettingsView: View {
                     Toggle("CoreML stem separation (Track B)", isOn: $configuration.useCoreMLSeparation)
                 }
                 Section {
+                    Toggle("Separate with htdemucs", isOn: $usesHTDemucs)
+                        .disabled(!configuration.useCoreMLSeparation)
+                } footer: {
+                    Text("Off uses Open-Unmix, to compare the two. Each method reuses its stems for the same song and trim, so pick a new trim to measure again. Debug builds only.")
+                }
+                Section {
                     Toggle("Allow recording without earphones", isOn: $allowsSpeakerRecording)
                 } header: {
                     Text("Device testing")
@@ -94,6 +101,7 @@ struct DebugSettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         DebugOptions.allowsSpeakerRecording = allowsSpeakerRecording
+                        DebugOptions.skipsHTDemucs = !usesHTDemucs
                         onSave(configuration)
                         dismiss()
                     }
