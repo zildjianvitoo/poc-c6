@@ -1,6 +1,6 @@
 # SRS & PRD: iOS Song Cover Recording & Auto-Comping PoC
 
-> **Version 3.1** — 3 Nov 2026: on-device separation of imported songs is **htdemucs** (CoreML), replacing the Open-Unmix model from the first Track B spike (§3). **Version 3** — 31 Oct 2026. v2 incorporated the decisions from `docs/review-prd.md`; v3 adds the team ownership split (§12) and switches guide extraction to Basic Pitch on the vocal stem (from `docs/review-tech-flow.md`). Lives at `docs/prd.md` (outside the app target so it is not bundled). Previous version archived at `docs/archive/prd-v1.md`. Accuracy roadmap: `docs/roadmap-akurasi.md`.
+> **Version 3.2** — 3 Nov 2026: synced lyrics on the trim screen from LRCLIB (§5.2). **Version 3.1** — 3 Nov 2026: on-device separation of imported songs is **htdemucs** (CoreML), replacing the Open-Unmix model from the first Track B spike (§3). **Version 3** — 31 Oct 2026. v2 incorporated the decisions from `docs/review-prd.md`; v3 adds the team ownership split (§12) and switches guide extraction to Basic Pitch on the vocal stem (from `docs/review-tech-flow.md`). Lives at `docs/prd.md` (outside the app target so it is not bundled). Previous version archived at `docs/archive/prd-v1.md`. Accuracy roadmap: `docs/roadmap-akurasi.md`.
 
 ## 1. Project Overview & Core Value Proposition
 Build an iOS 18+ Proof of Concept (PoC) application in Swift & SwiftUI for independent Gen Z song cover creators.
@@ -17,16 +17,16 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 
 ### 2.1 In Scope (PoC)
 * Vocal range test, auto-transpose (semitone level).
-* Import (Files / Photos / bundled demo), trim 15–60 s, stem separation, guide extraction, segmentation.
+* Import (Files / Photos / bundled demo), trim 15–60 s with synced lyrics of the chosen part (§5.2), stem separation, guide extraction, segmentation.
 * Continuous recording session with live piano roll, evaluation loop, early end with partial export.
 * Comping, vocal + instrumental mixdown, export, preview, share, save to Photos.
 * Debug settings screen for tuning thresholds (§8).
 
 ### 2.2 Out of Scope (PoC)
-* Lyrics display, manual editing of guide notes, MIDI import.
+* Lyrics on the recording screen, editing lyrics, manual editing of guide notes, MIDI import.
 * Choosing between multiple passed takes of the same segment, voluntarily re-recording a passed segment.
 * Vocal effects (reverb, EQ, auto-tune), video transitions/filters (video cuts are hard cuts).
-* Landscape, iPad, accounts/backend, direct upload to social platforms, cloud processing.
+* Landscape, iPad, accounts/backend, direct upload to social platforms, cloud processing. *(Exception: the lyrics lookup in §5.2 sends only the title, artist and duration to LRCLIB; audio never leaves the device.)*
 
 ### 2.3 Platform
 * **iOS 18.0+, iPhone only, portrait only.** Testing requires a physical iPhone (front camera + mic).
@@ -76,6 +76,11 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 ### 5.2 Import, Trim & Disclaimer
 * Formats: `.mp3`, `.m4a`, `.wav`, `.mov` (audio track extracted). DRM-protected files must show a clear error.
 * Waveform trimmer, min 15 s, max 60 s.
+* **Synced lyrics (v3.2):** right after import the app looks up time-synced lyrics on **LRCLIB** (`lrclib.net`, free, no key) using the file's title/artist tags, or a guess from the file name ("Artist - Title (Lyric Video)"). The version whose duration is within ±5 s of the file is used, so its line times fit this recording; otherwise "No lyrics found" with a manual title/artist search. Offline or busy service: "Lyrics unavailable", trimming still works.
+  * Lines inside the chosen part are lit, the rest dimmed, and the list scrolls to the selection start.
+  * **Play Selection** previews the chosen part: the current line is bold and its words fill in karaoke-style. LRC times whole lines only, so word times are estimated from syllable counts (capped so words don't stretch into instrumental breaks).
+  * Credit line under the lyrics: matched title/artist, "from LRCLIB", timing may be slightly off.
+  * No ASR model: the on-device Whisper spike (`docs/test-reports/lyrics-whisper-spike-2026-11-03.md`) needed a 550 MB model to reach 27 % WER on Indonesian.
 * Disclaimer (processing screen + small badge on the recording screen):
   > **Experimental (Phase 1):** The pitch guide is extracted from the original song and may be inaccurate, especially in busy sections.
 * When the center-channel fallback is used, additionally:
@@ -334,6 +339,7 @@ public protocol VideoCompositionRepository: Sendable {
 1. **Stem separation:** `BundledStemsRepository` (Track A demo), `SynthesizedDemoRepository` (developer fallback), `CenterChannelStemRepository` (L−R / mid fallback), `HTDemucsStemSeparationRepository` (htdemucs CoreML + `DemucsSpectrogram`, behind `useCoreMLSeparation`); `SelectingStemSeparationRepository` picks htdemucs and falls back to center-channel.
 2. **Guide extraction:** `BasicPitchAnalysisRepository` (CoreML + monophonic reduction) and `CrepeAnalysisRepository` (`AVAssetReader` → PCM float → `CrepePitchDetector`), both conforming to `AudioAnalysisRepository` (§5.3). Fallback chosen in `PrepareSongUseCase`.
 3. **`AudioTranspositionRepositoryImpl`** — `AVAudioEngine` offline manual rendering + `AVAudioUnitTimePitch`.
+   * **Lyrics (trim screen):** `LRCLibLyricsProvider` (URLSession, LRCLIB search + duration match), `LRCLyricsParser` (LRC → lines + estimated word times), `SongTitleGuess` (title/artist from file names); protocol `LyricsProviding` lives with the import screen (`Presentation/Import`), like `AudioFileInspecting`.
 4. **`CaptureRepositoryImpl`**
    * `AVCaptureSession` with `automaticallyConfiguresApplicationAudioSession = false`, front `builtInWideAngleCamera` (1080×1920 @ 30 fps, video connection mirrored), built-in mic.
    * `AVCaptureVideoDataOutput` + `AVCaptureAudioDataOutput` → `AVAssetWriter` (`RawMasterVideo.mov`, HEVC + AAC), `startSession(atSourceTime: firstVideoPTS)`; audio samples before `firstVideoPTS` dropped.
