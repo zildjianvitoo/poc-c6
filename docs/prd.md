@@ -1,6 +1,6 @@
 # SRS & PRD: iOS Song Cover Recording & Auto-Comping PoC
 
-> **Version 3** — 31 Oct 2026. v2 incorporated the decisions from `docs/review-prd.md`; v3 adds the team ownership split (§12) and switches guide extraction to Basic Pitch on the vocal stem (from `docs/review-tech-flow.md`). Lives at `docs/prd.md` (outside the app target so it is not bundled). Previous version archived at `docs/archive/prd-v1.md`. Accuracy roadmap: `docs/roadmap-akurasi.md`.
+> **Version 3.1** — 3 Nov 2026: on-device separation of imported songs is **htdemucs** (CoreML), replacing the Open-Unmix model from the first Track B spike (§3). **Version 3** — 31 Oct 2026. v2 incorporated the decisions from `docs/review-prd.md`; v3 adds the team ownership split (§12) and switches guide extraction to Basic Pitch on the vocal stem (from `docs/review-tech-flow.md`). Lives at `docs/prd.md` (outside the app target so it is not bundled). Previous version archived at `docs/archive/prd-v1.md`. Accuracy roadmap: `docs/roadmap-akurasi.md`.
 
 ## 1. Project Overview & Core Value Proposition
 Build an iOS 18+ Proof of Concept (PoC) application in Swift & SwiftUI for independent Gen Z song cover creators.
@@ -45,7 +45,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
   * **Guide extraction: Spotify Basic Pitch (CoreML)** run on the **vocal stem**, followed by monophonic reduction (§5.3). Bundled as an `.mlpackage`, no SPM dependency. Verify the model license and the CoreML export before committing.
   * **Stem separation — two-track strategy:**
     * **Track A — Guaranteed demo:** a bundled, royalty-free demo song whose stems (`mix`, `vocal`, `instrumental`) were separated **offline on a Mac** (e.g. Demucs) plus a verified guide file. Guarantees the end-to-end demo sounds good. Copyrighted songs must NOT be bundled in the repo/app.
-    * **Track B — On-device spike (time-boxed 3–5 days):** evaluate a CoreML separation model for user-imported songs. Measure model size, processing time for a 60 s clip (target < 30 s), peak memory, and separation quality. If the spike fails, imported songs use the **center-channel cancellation fallback** (L−R for instrumental, mid channel for vocal guide) with a disclaimer.
+    * **Track B — On-device separation (decided 2026-11-03): htdemucs (Demucs v4, Meta, MIT) converted to CoreML** for user-imported songs. Only the network is in the model (`HTDemucs.mlpackage`, 58 MB: float16 with float32 normalisation, cross-transformer weights in int8); the demucs STFT/iSTFT and the 7.8 s chunking (25 % overlap) run in Swift with vDSP. Runs on the GPU (`.cpuAndGPU`; the Neural Engine and `.all` are slower or inaccurate for this model). Vocal stem = htdemucs `vocals`; instrumental = drums + bass + other. Measured: melody leakage into the instrumental 0.7 % (Open-Unmix, the first spike's model, 4.9 %); iPhone 17: 30 s in ~4 s, peak memory ~1 GB. If the model can't be used, imported songs use the **center-channel cancellation fallback** (L−R for instrumental, mid channel for vocal guide) with a disclaimer. Details: `docs/test-reports/htdemucs-coreml-spike-2026-11-03.md`.
   * **Order decided 2026-11-01:** user import comes first (center-channel fallback + CREPE guide on the device), then the Track B spike; the Track A demo is a later safety net.
   * **Developer fallback:** a synthesized demo (sine melody as "vocal", simple chord pad as "instrumental", mix = sum) so the pipeline is testable before the Track A asset exists.
 * **Phase 2+:** better ML pitch models, AudioKit, etc. — see `docs/roadmap-akurasi.md`. All swaps happen behind the repository protocols in §6.3.
@@ -82,7 +82,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
   > Background music uses basic vocal removal. Some original vocals may still be audible.
 
 ### 5.3 Guide Extraction & Segmentation
-* **Extraction input:** the vocal stem (bundled or CoreML) or the mid channel (fallback).
+* **Extraction input:** the vocal stem (bundled or htdemucs) or the mid channel (fallback).
 * **Primary — Basic Pitch:** resample to the model's input rate, run inference, take note events (pitch, onset, offset, confidence). Basic Pitch is polyphonic, so apply **monophonic reduction**: at each moment keep only the highest-confidence note, drop notes < 120 ms or below a confidence threshold, merge consecutive same-pitch notes separated by < 50 ms.
 * **Fallback — CREPE:** run `CrepePitchDetector` over the vocal stem every 50 ms → frames below the confidence threshold are unvoiced → stable regions ≥ 120 ms (< ±50 cents variation) become notes. Used when Basic Pitch fails to load or produces no notes.
 * Notes are stored in the **original key**; transposition is applied at display/evaluation time.
@@ -331,7 +331,7 @@ public protocol VideoCompositionRepository: Sendable {
 * **`AutoCompingVideoUseCase`** — builds `CompingCompositionPlan` from `passedTakesPrefix()` and calls `VideoCompositionRepository`.
 
 ### 6.5 Data & Infrastructure Layer
-1. **Stem separation:** `BundledStemsRepository` (Track A demo), `SynthesizedDemoRepository` (developer fallback), `CenterChannelStemRepository` (L−R / mid fallback), `CoreMLStemSeparationRepository` (Track B spike, behind a feature flag).
+1. **Stem separation:** `BundledStemsRepository` (Track A demo), `SynthesizedDemoRepository` (developer fallback), `CenterChannelStemRepository` (L−R / mid fallback), `HTDemucsStemSeparationRepository` (htdemucs CoreML + `DemucsSpectrogram`, behind `useCoreMLSeparation`); `SelectingStemSeparationRepository` picks htdemucs and falls back to center-channel.
 2. **Guide extraction:** `BasicPitchAnalysisRepository` (CoreML + monophonic reduction) and `CrepeAnalysisRepository` (`AVAssetReader` → PCM float → `CrepePitchDetector`), both conforming to `AudioAnalysisRepository` (§5.3). Fallback chosen in `PrepareSongUseCase`.
 3. **`AudioTranspositionRepositoryImpl`** — `AVAudioEngine` offline manual rendering + `AVAudioUnitTimePitch`.
 4. **`CaptureRepositoryImpl`**
@@ -390,7 +390,7 @@ public protocol VideoCompositionRepository: Sendable {
 | `vocalGain` / `instrumentalGain` | 1.0 / 0.8 |
 | `manualLatencyCalibration` | 0 ms |
 | `maxSessionDuration` | 15 min |
-| `useCoreMLSeparation` | true *(Track B "go" after the 2026-11-01 spike; center-channel is the automatic fallback)* |
+| `useCoreMLSeparation` | true *(htdemucs on the device; center-channel is the automatic fallback)* |
 
 ---
 
@@ -416,7 +416,7 @@ public protocol VideoCompositionRepository: Sendable {
 5. On-screen pitch trail latency < 100 ms.
 6. Export time < 2× clip duration.
 7. Partial export works after ending at segment N (1 ≤ N < M).
-8. Track B spike produces a written result: model, size, processing time, memory, quality verdict, go/no-go.
+8. Track B produces a written result: model, size, processing time, memory, quality verdict, go/no-go. *(Done: `docs/test-reports/htdemucs-coreml-spike-2026-11-03.md`, go with htdemucs.)*
 
 ---
 
@@ -433,11 +433,12 @@ poc-c6/
     Repositories/ protocols from §6.3
     Contracts/    ContractValidation, DomainFixtures
     UseCases/     use cases from §6.4
-  Shared/DSP/     CrepePitchDetector (live pitch, vocal range test, guide fallback)
+  Shared/DSP/     CrepePitchDetector (live pitch, vocal range test, guide fallback),
+                  ShortTimeFourierTransform + DemucsSpectrogram (htdemucs STFT/iSTFT)
   Shared/Storage/ SessionFiles (raw + final video locations, cleanup per session)
   Fakes/          fake implementations of every protocol (used until real ones land)
   Data/
-    Separation/   Bundled, Synthesized, CenterChannel, CoreML (flagged)
+    Separation/   Bundled, Synthesized, CenterChannel, HTDemucs (CoreML, flagged), Selecting
     Audio/        BasicPitchAnalysisRepository, CrepeAnalysisRepository, AudioTranspositionRepositoryImpl,
                   ReferencePlaybackRepositoryImpl, AudioRouteMonitorImpl
     Capture/      CaptureRepositoryImpl
@@ -487,6 +488,6 @@ Detailed per-person backlogs: `docs/backlog/ikzaz.md`, `docs/backlog/takin.md`, 
 1. **M1 — Contracts frozen:** Domain entities + protocols merged; fakes available.
 2. **M2 — Synthesized end-to-end:** synthesized demo → record → at least one TRY AGAIN → export. Proves clock sync and cutting (§10.2–10.4) before real audio analysis is plugged in.
 3. **M3 — Real song end-to-end:** Track A demo with Basic Pitch guide, transposition, and instrumental mix.
-4. **M4 — Track B verdict:** go/no-go for on-device separation of imported songs.
+4. **M4 — Track B verdict:** go/no-go for on-device separation of imported songs. *(Go, 2026-11-03: htdemucs.)*
 
 > Workload note: Takin's scope sits on the critical path (clock sync + realtime pitch). Plan to pair on §7.1 with Zildjian, since cut accuracy depends on it.
