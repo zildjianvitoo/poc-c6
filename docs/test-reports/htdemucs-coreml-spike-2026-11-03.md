@@ -111,10 +111,18 @@ Build Debug, dijalankan lewat `devicectl` dengan log `[Separation]` dari `Loggin
 
 **Kesimpulan waktu:** model di iPhone sudah cepat. Untuk 60 s (11 potongan) perkiraannya sekitar 4,5 s untuk model + 1 s muat model, jauh di bawah target 30 s. Angka 20,4 s di build Debug hampir seluruhnya berasal dari kode Swift STFT/iSTFT yang tidak dioptimasi compiler: di Mac kode ini ~70× lebih lambat dengan `-Onone`. Jadi Neural Engine atau MLX tidak diperlukan untuk mengejar target waktu.
 
-- Belum diukur: lagu 60 s di Release, perbandingan dengan Open-Unmix, dan app di background saat Persiapan.
+**Perbaikan untuk build Debug (vDSP):** loop per sampel di `ShortTimeFourierTransform`, `DemucsSpectrogram`, dan `HTDemucsStemSeparationRepository.separate` diganti dengan vDSP: perkalian jendela, pack/unpack FFT, overlap-add, transpose input dan output model, penjumlahan sumber, dan pembobotan potongan. Hasilnya identik dengan versi lama (SNR 149 dB, sisa pembulatan float); kecocokan dengan Python CoreML tetap 67 dB.
+
+| Mac M5, 60 s | Sebelum vDSP | Sesudah vDSP |
+|---|---|---|
+| `-Onone` (Debug): STFT + input / iSTFT + penggabungan | 8,85 s / 18,88 s | 0,08 s / 0,34 s |
+| `-Onone` (Debug): total | 30,9 s | **2,3 s** |
+| `-O` (Release): total | 2,6 s | 2,15 s |
+
+- Belum diukur: lagu 60 s di iPhone (Debug sesudah vDSP, dan Release), perbandingan dengan Open-Unmix, dan app di background saat Persiapan. Loop mask Open-Unmix (`CoreMLStemSeparationRepository.separate`) belum diubah ke vDSP, jadi Open-Unmix di Debug masih lebih lambat.
 
 ## 8. Belum diukur / risiko
-- **Build Debug lambat** (~20 s untuk 30 s, perkiraan ~40 s untuk 60 s) karena STFT/iSTFT Swift tidak dioptimasi. Build Release tidak terkena masalah ini.
+- Build Debug sempat lambat (~20 s untuk 30 s) karena STFT/iSTFT Swift tidak dioptimasi. Sudah diperbaiki dengan vDSP (§7), tapi belum dicek ulang di iPhone.
 - Memori di iPhone 17 (8 GB) aman. iPhone dengan RAM 6 GB ke bawah belum dicoba.
 - **Kalau Core ML menjalankan model di CPU** (Simulator, dan mungkin saat app di background), hasilnya tetap dipakai tapi lebih berisik: SNR 29–37 dB, level yang sama dengan hiss int8. Kebocoran tetap 0,7%. Cek di iPhone: keluar dari app saat Persiapan, lalu dengarkan hasilnya.
 - Hanya satu lagu yang diuji.

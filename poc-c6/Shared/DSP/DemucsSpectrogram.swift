@@ -7,6 +7,7 @@
 //  the Nyquist bin dropped. Reference: prototypes/htdemucs-coreml/core.py.
 //
 
+import Accelerate
 import Foundation
 
 nonisolated struct DemucsSpectrogram: Sendable {
@@ -28,11 +29,8 @@ nonisolated struct DemucsSpectrogram: Sendable {
         let padded = Self.reflectPad(signal, left: pad, right: pad + frames * Self.hop - signal.count)
         // The centred STFT of the padded signal has frames + 4 frames; demucs keeps the middle ones.
         return stft.forward(padded)[2..<(2 + frames)].map { spectrum in
-            var s = spectrum
-            for b in 0..<Self.bins {
-                s.real[b] *= scale
-                s.imaginary[b] *= scale
-            }
+            var s = ShortTimeFourierTransform.Spectrum(real: vDSP.multiply(scale, spectrum.real),
+                                                       imaginary: vDSP.multiply(scale, spectrum.imaginary))
             s.real[Self.bins] = 0
             s.imaginary[Self.bins] = 0
             return s
@@ -45,11 +43,8 @@ nonisolated struct DemucsSpectrogram: Sendable {
         let empty = ShortTimeFourierTransform.Spectrum(real: [Float](repeating: 0, count: bins),
                                                        imaginary: [Float](repeating: 0, count: bins))
         let unscaled = spectra.map { spectrum in
-            var s = spectrum
-            for b in 0..<Self.bins {
-                s.real[b] /= scale
-                s.imaginary[b] /= scale
-            }
+            var s = ShortTimeFourierTransform.Spectrum(real: vDSP.multiply(1 / scale, spectrum.real),
+                                                       imaginary: vDSP.multiply(1 / scale, spectrum.imaginary))
             s.real[Self.bins] = 0
             s.imaginary[Self.bins] = 0
             return s
@@ -66,8 +61,8 @@ nonisolated struct DemucsSpectrogram: Sendable {
         guard n > max(left, right) else {
             return [Float](repeating: 0, count: left) + signal + [Float](repeating: 0, count: right)
         }
-        let head = (0..<left).map { signal[left - $0] }
-        let tail = (0..<right).map { signal[n - 2 - $0] }
-        return head + signal + tail
+        let head = signal[1...left].reversed()
+        let tail = signal[(n - 1 - right)..<(n - 1)].reversed()
+        return Array(head) + signal + Array(tail)
     }
 }

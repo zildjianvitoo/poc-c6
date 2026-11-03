@@ -9,6 +9,7 @@
 //  docs/test-reports/htdemucs-coreml-spike-2026-11-03.md, prototypes/htdemucs-coreml/.
 //
 
+import Accelerate
 import AVFoundation
 import CoreML
 import os
@@ -97,6 +98,7 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
     // MARK: - Separation
 
     /// Vocal and instrumental (drums + bass + other) estimate per channel, same length as the input.
+    /// Per-sample work goes through vDSP so Debug builds (no Swift optimisation) stay fast.
     static func separate(_ channels: [[Float]], model: MLModel) throws -> (vocals: [[Float]], instrumental: [[Float]]) {
         let spectrogram = DemucsSpectrogram()
         let segment = segmentSamples
@@ -104,9 +106,11 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
         let bins = DemucsSpectrogram.bins
         let length = channels[0].count
         let stride = segment * 3 / 4
-        // Triangle peaking mid-window (apply_model, transition power 1).
+        // Triangle peaking mid-window (apply_model, transition power 1): 1, 2, …, half, …, 2, 1 over half.
         let half = segment / 2
-        let weight = (0..<segment).map { Float($0 < half ? $0 + 1 : segment - $0) / Float(half) }
+        let weight = vDSP.divide(vDSP.ramp(withInitialValue: 1, increment: 1, count: half)
+                                     + vDSP.ramp(withInitialValue: Float(segment - half), increment: -1, count: segment - half),
+                                 Float(half))
         let targets = [[vocalsSource], (0..<sources.count).filter { $0 != vocalsSource }]
 
         var output = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: length), count: 2), count: targets.count)
@@ -125,23 +129,22 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
             let trim = (segment - count) / 2
             let start = offset - trim
             let inputStarted = clock.now
+            let lo = max(0, start), hi = min(length, start + segment)
             let window = channels.map { channel in
-                (0..<segment).map { j -> Float in
-                    let k = start + j
-                    return k >= 0 && k < length ? channel[k] : 0
-                }
+                var samples = [Float](repeating: 0, count: segment)
+                samples.replaceSubrange((lo - start)..<(hi - start), with: channel[lo..<hi])
+                return samples
             }
             let mixPointer = mixInput.dataPointer.bindMemory(to: Float.self, capacity: mixInput.count)
             let specPointer = specInput.dataPointer.bindMemory(to: Float.self, capacity: specInput.count)
             for c in 0..<2 {
-                for j in 0..<segment { mixPointer[c * mixStrides[1] + j * mixStrides[2]] = window[c][j] }
-                // Complex as channels: [L real, L imaginary, R real, R imaginary].
-                for (t, spectrum) in spectrogram.forward(window[c]).enumerated() {
-                    for b in 0..<bins {
-                        specPointer[(2 * c) * specStrides[1] + b * specStrides[2] + t * specStrides[3]] = spectrum.real[b]
-                        specPointer[(2 * c + 1) * specStrides[1] + b * specStrides[2] + t * specStrides[3]] = spectrum.imaginary[b]
-                    }
-                }
+                copy(window[c], to: mixPointer + c * mixStrides[1], stride: mixStrides[2])
+                // Complex as channels: [L real, L imaginary, R real, R imaginary], each (bin, frame).
+                let spectra = spectrogram.forward(window[c])
+                writePlane(frameMajor(spectra.map(\.real), bins: bins), to: specPointer + (2 * c) * specStrides[1],
+                           binStride: specStrides[2], frameStride: specStrides[3], bins: bins, frames: frames)
+                writePlane(frameMajor(spectra.map(\.imaginary), bins: bins), to: specPointer + (2 * c + 1) * specStrides[1],
+                           binStride: specStrides[2], frameStride: specStrides[3], bins: bins, frames: frames)
             }
 
             let modelStarted = clock.now
@@ -157,32 +160,36 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
             }
             let so = specOut.strides.map(\.intValue)
             let wo = waveOut.strides.map(\.intValue)
-            let specValues = specOut.dataPointer.bindMemory(to: Float.self, capacity: specOut.count)
-            let waveValues = waveOut.dataPointer.bindMemory(to: Float.self, capacity: waveOut.count)
+            let specValues = UnsafePointer(specOut.dataPointer.bindMemory(to: Float.self, capacity: specOut.count))
+            let waveValues = UnsafePointer(waveOut.dataPointer.bindMemory(to: Float.self, capacity: waveOut.count))
 
-            for j in 0..<count { total[offset + j] += weight[j] }
+            total.withUnsafeMutableBufferPointer {
+                vDSP_vadd(weight, 1, $0.baseAddress! + offset, 1, $0.baseAddress! + offset, 1, vDSP_Length(count))
+            }
             for (target, sourceIndices) in targets.enumerated() {
                 for c in 0..<2 {
                     // Sum the target's sources first: iSTFT is linear, so one inverse per target.
-                    let spectra = (0..<frames).map { t -> ShortTimeFourierTransform.Spectrum in
-                        var real = [Float](repeating: 0, count: bins + 1)
-                        var imaginary = [Float](repeating: 0, count: bins + 1)
-                        for s in sourceIndices {
-                            let re = (s * 4 + 2 * c) * so[1] + t * so[3]
-                            let im = (s * 4 + 2 * c + 1) * so[1] + t * so[3]
-                            for b in 0..<bins {
-                                real[b] += specValues[re + b * so[2]]
-                                imaginary[b] += specValues[im + b * so[2]]
-                            }
-                        }
-                        return ShortTimeFourierTransform.Spectrum(real: real, imaginary: imaginary)
+                    func summed(_ part: Int) -> [Float] {
+                        sourceIndices.map { s in
+                            readPlane(specValues + (s * 4 + 2 * c + part) * so[1], binStride: so[2], frameStride: so[3],
+                                      bins: bins, frames: frames)
+                        }.reduce([Float](repeating: 0, count: bins * frames)) { vDSP.add($0, $1) }
                     }
-                    let frequencyBranch = spectrogram.inverse(spectra, length: segment)
-                    for j in 0..<count {
-                        let i = trim + j
-                        var sample = frequencyBranch[i]
-                        for s in sourceIndices { sample += waveValues[(s * 2 + c) * wo[1] + i * wo[2]] }
-                        output[target][c][offset + j] += weight[j] * sample
+                    let real = summed(0), imaginary = summed(1)
+                    let spectra = (0..<frames).map { t in
+                        ShortTimeFourierTransform.Spectrum(real: Array(real[(t * bins)..<((t + 1) * bins)]) + [0],
+                                                           imaginary: Array(imaginary[(t * bins)..<((t + 1) * bins)]) + [0])
+                    }
+                    // Frequency branch + the sources' time branch, then weighted into the output.
+                    var chunk = Array(spectrogram.inverse(spectra, length: segment)[trim..<(trim + count)])
+                    chunk.withUnsafeMutableBufferPointer { samples in
+                        for s in sourceIndices {
+                            vDSP_vadd(samples.baseAddress!, 1, waveValues + (s * 2 + c) * wo[1] + trim * wo[2], vDSP_Stride(wo[2]),
+                                      samples.baseAddress!, 1, vDSP_Length(count))
+                        }
+                    }
+                    output[target][c].withUnsafeMutableBufferPointer {
+                        vDSP_vma(chunk, 1, weight, 1, $0.baseAddress! + offset, 1, $0.baseAddress! + offset, 1, vDSP_Length(count))
                     }
                 }
             }
@@ -193,11 +200,62 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
             model \(modelTime / .seconds(1), format: .fixed(precision: 2)) s, iSTFT + mixing \(outputTime / .seconds(1), format: .fixed(precision: 2)) s
             """)
 
-        for target in output.indices {
-            for c in 0..<2 {
-                for i in 0..<length where total[i] > 0 { output[target][c][i] /= total[i] }
+        // Every sample is covered by at least one chunk, so total > 0.
+        let normalized = output.map { target in target.map { vDSP.divide($0, total) } }
+        return (normalized[0], normalized[1])
+    }
+
+    // MARK: - Strided copies (vDSP)
+
+    /// Frames (each ≥ `bins` values) → one (frame, bin) row-major matrix of the first `bins` values.
+    private static func frameMajor(_ frames: [[Float]], bins: Int) -> [Float] {
+        var matrix = [Float]()
+        matrix.reserveCapacity(frames.count * bins)
+        for frame in frames { matrix.append(contentsOf: frame[0..<bins]) }
+        return matrix
+    }
+
+    private static func copy(_ values: [Float], to destination: UnsafeMutablePointer<Float>, stride: Int) {
+        var zero: Float = 0
+        // Strided copy: destination[i * stride] = values[i] + 0.
+        vDSP_vsadd(values, 1, &zero, destination, vDSP_Stride(stride), vDSP_Length(values.count))
+    }
+
+    /// (frame, bin) matrix → a model plane laid out with the given (bin, frame) strides.
+    private static func writePlane(_ matrix: [Float], to destination: UnsafeMutablePointer<Float>,
+                                   binStride: Int, frameStride: Int, bins: Int, frames: Int) {
+        guard frameStride == 1 else {
+            for t in 0..<frames {
+                for b in 0..<bins { destination[b * binStride + t * frameStride] = matrix[t * bins + b] }
             }
+            return
         }
-        return (output[0], output[1])
+        if binStride == frames {
+            vDSP_mtrans(matrix, 1, destination, 1, vDSP_Length(bins), vDSP_Length(frames))
+        } else {
+            var transposed = [Float](repeating: 0, count: bins * frames)
+            vDSP_mtrans(matrix, 1, &transposed, 1, vDSP_Length(bins), vDSP_Length(frames))
+            vDSP_mmov(transposed, destination, vDSP_Length(frames), vDSP_Length(bins), vDSP_Length(frames), vDSP_Length(binStride))
+        }
+    }
+
+    /// A model plane with the given (bin, frame) strides → a (frame, bin) row-major matrix.
+    private static func readPlane(_ source: UnsafePointer<Float>, binStride: Int, frameStride: Int,
+                                  bins: Int, frames: Int) -> [Float] {
+        var matrix = [Float](repeating: 0, count: bins * frames)
+        guard frameStride == 1 else {
+            for t in 0..<frames {
+                for b in 0..<bins { matrix[t * bins + b] = source[b * binStride + t * frameStride] }
+            }
+            return matrix
+        }
+        if binStride == frames {
+            vDSP_mtrans(source, 1, &matrix, 1, vDSP_Length(frames), vDSP_Length(bins))
+        } else {
+            var packed = [Float](repeating: 0, count: bins * frames)
+            vDSP_mmov(source, &packed, vDSP_Length(frames), vDSP_Length(bins), vDSP_Length(binStride), vDSP_Length(frames))
+            vDSP_mtrans(packed, 1, &matrix, 1, vDSP_Length(frames), vDSP_Length(bins))
+        }
+        return matrix
     }
 }
