@@ -5,6 +5,11 @@
                                     softmax and attention stay float32
   python phase2_convert.py fp32
   python phase2_convert.py int8     "mixed" with weights linearly quantized to int8 (per channel)
+  python phase2_convert.py int8out  as int8, but small weights (< 10 000 values, incl. both output
+                                    layers) stay float16, against the hiss heard with int8
+  python phase2_convert.py pal8     "mixed" with weights palettized to 8 bits (k-means)
+  python phase2_convert.py int8tr   "mixed" with only the cross-transformer's weights (75 % of all
+                                    parameters) in int8; encoder/decoder layers stay float16
 
 Writes $HTDEMUCS_WORK/HTDemucs_<variant>.mlpackage and checks it on one window against PyTorch.
 """
@@ -55,13 +60,25 @@ if __name__ == "__main__":
         inputs=[ct.TensorType(name="mix", shape=mix.shape), ct.TensorType(name="spec", shape=spec.shape)],
         outputs=[ct.TensorType(name="spec_out"), ct.TensorType(name="wave_out")],
         convert_to="mlprogram",
-        compute_precision=precision("mixed" if variant == "int8" else variant),
+        compute_precision=precision("mixed" if variant in ("int8", "int8out", "int8tr", "pal8") else variant),
         minimum_deployment_target=ct.target.iOS18,
     )
-    if variant == "int8":
+    if variant in ("int8", "int8out"):
         from coremltools.optimize.coreml import OpLinearQuantizerConfig, OptimizationConfig, linear_quantize_weights
-        config = OptimizationConfig(global_config=OpLinearQuantizerConfig(mode="linear_symmetric", granularity="per_channel"))
+        threshold = 10_000 if variant == "int8out" else 2048
+        config = OptimizationConfig(global_config=OpLinearQuantizerConfig(
+            mode="linear_symmetric", granularity="per_channel", weight_threshold=threshold))
         ml = linear_quantize_weights(ml, config=config)
+    elif variant == "int8tr":
+        from coremltools.optimize.coreml import (OpLinearQuantizerConfig, OptimizationConfig,
+                                                 get_weights_metadata, linear_quantize_weights)
+        int8 = OpLinearQuantizerConfig(mode="linear_symmetric", granularity="per_channel")
+        names = [n for n in get_weights_metadata(ml, weight_threshold=2048) if "crosstransformer" in n]
+        ml = linear_quantize_weights(ml, config=OptimizationConfig(op_name_configs={n: int8 for n in names}))
+    elif variant == "pal8":
+        from coremltools.optimize.coreml import OpPalettizerConfig, OptimizationConfig, palettize_weights
+        config = OptimizationConfig(global_config=OpPalettizerConfig(mode="kmeans", nbits=8))
+        ml = palettize_weights(ml, config=config)
     ml.short_description = ("htdemucs (Meta, MIT) network without STFT/iSTFT. Input: 7.8 s stereo "
                             "44.1 kHz window + its complex-as-channels STFT. Sources: drums, bass, other, vocals.")
     path = WORK / f"HTDemucs_{variant}.mlpackage"

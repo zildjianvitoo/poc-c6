@@ -25,6 +25,9 @@ Fase 1: bungkus model tanpa STFT identik bit-per-bit dengan htdemucs asli pada s
 | mixed | 85 MB | CPU+NE | 28,4 s | **7.888 MB** | 52,3 dB | 0,7% |
 | **int8** (bobot int8 per channel, hitung seperti mixed) | **43 MB** | **CPU+GPU** | **1,96 s** | 1.475 MB | 34,4 dB | **0,7%** |
 | int8 | 43 MB | CPU+NE | 28,7 s | 7.757 MB | 34,3 dB | 0,7% |
+| int8out (int8, bobot kecil termasuk layer output tetap fp16) | 43 MB | CPU+GPU | 1,93 s | 1.475 MB | 36,4 dB | 0,7% |
+| pal8 (palettization 8-bit k-means) | 43 MB | CPU+GPU | 1,62 s | 1.377 MB | 31,0 dB | 0,7% |
+| **int8tr** (int8 hanya di cross-transformer) | **58 MB** | **CPU+GPU** | **1,84 s** | 1.395 MB | **59,1 dB** | **0,7%** |
 | fp32 | 169 MB | CPU+GPU | 3,50 s | 1.452 MB | 127 dB | 0,7% |
 | fp32 | 169 MB | CPU+NE (jalan di CPU) | 6,43 s | 1.703 MB | 106 dB | 0,7% |
 
@@ -50,7 +53,8 @@ Metrik kebocoran: CREPE tiny (model app, keyakinan ≥ 0,5) menghitung persentas
 - **Risiko iOS: GPU tidak boleh dipakai saat app di background.** Kalau pengguna keluar dari app saat Persiapan, inferensi akan gagal. Perlu ditangani di Fase 4, misalnya dengan pindah ke cadangan Open-Unmix atau center-channel lewat `SelectingStemSeparationRepository`, dengan pesan dari `UserFacingError`.
 
 ## 5. Rekomendasi
-- **Lanjut ke Fase 4 dengan varian int8 (43 MB, `.cpuAndGPU`).** Kebocorannya sama dengan mixed (0,7%), ukurannya setengah, dan hanya 0,4 s lebih lambat di Mac. SNR 34 dB terhadap PyTorch kemungkinan tidak terdengar di bawah musik, tapi **perlu dicek telinga** (bandingkan `htdemucs_int8_*` dan `htdemucs_mixed_*` di `~/htdemucs-spike/out/`). Kalau terdengar beda, pakai mixed (85 MB).
+- **Tes dengar (Zildjian, 3 Nov):** kualitas pemisahan mixed dan int8 sama, tapi **int8 menambah hiss sepanjang lagu**. Hiss ini cocok dengan SNR int8 yang hanya ~34 dB. Kuantisasi 8-bit di seluruh model (int8, int8out, pal8) memberi SNR 31–36 dB, jadi hiss-nya kemungkinan muncul juga di ketiganya.
+- **Lanjut ke Fase 4 dengan varian int8tr (58 MB, `.cpuAndGPU`).** Cross-transformer memegang 75% parameter dan bekerja di resolusi rendah, di tengah jaringan. Hanya bagian ini yang dibuat int8, sedangkan layer encoder dan decoder yang menyentuh audio langsung tetap fp16. Hasilnya SNR 59 dB, mendekati mixed (64,6 dB). Hiss-nya **perlu dikonfirmasi dengan didengar** (`local-songs/htdemucs-listen/5-*`). Kalau masih terdengar, pakai mixed (85 MB).
 - Model baru masuk `poc-c6/Resources/` saat integrasi Fase 4, bukan sekarang.
 - Open-Unmix tetap ada sebagai cadangan pertama, center-channel sebagai cadangan kedua.
 
