@@ -1,6 +1,6 @@
 # Spike htdemucs → CoreML (Fase 0–4 di Mac, Fase 5 awal di iPhone 17) — 3 November 2026
 
-**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Di iPhone 17 memori aman (puncak ~1 GB) dan build Release memproses 30 s dalam ~3,6 s; build Debug jauh lebih lambat (§7).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
+**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Di iPhone 17 memori aman (puncak ~1 GB) dan 30 s diproses dalam ~3,6–3,9 s, baik di build Release maupun Debug (§7).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
 
 Angka di iPhone belum ada. Semua angka di sini dari Mac M5 (RAM 24 GB). Script ada di `prototypes/htdemucs-coreml/`.
 
@@ -119,10 +119,12 @@ Build Debug, dijalankan lewat `devicectl` dengan log `[Separation]` dari `Loggin
 | `-Onone` (Debug): total | 30,9 s | **2,3 s** |
 | `-O` (Release): total | 2,6 s | 2,15 s |
 
-- Belum diukur: lagu 60 s di iPhone (Debug sesudah vDSP, dan Release), perbandingan dengan Open-Unmix, dan app di background saat Persiapan. Loop mask Open-Unmix (`CoreMLStemSeparationRepository.separate`) belum diubah ke vDSP, jadi Open-Unmix di Debug masih lebih lambat.
+**iPhone 17, build Debug sesudah vDSP (trim 30 s):** total **3,94 s** (sebelumnya 20,36 s). Rinciannya: muat model 0,97 s, baca audio 0,08 s, STFT + input 0,05 s, model 2,40 s, iSTFT + penggabungan 0,21 s, tulis stem 0,22 s. Memori puncak 1.051 MB, dengan sisa 3.328 MB sebelum batas iOS. Build Debug sekarang setara dengan Release (≈ 3,6 s).
+
+- Belum diukur: lagu 60 s di iPhone (perkiraan ~6 s), perbandingan dengan Open-Unmix, dan app di background saat Persiapan. Loop mask Open-Unmix (`CoreMLStemSeparationRepository.separate`) belum diubah ke vDSP, jadi Open-Unmix di Debug masih lebih lambat.
 
 ## 8. Belum diukur / risiko
-- Build Debug sempat lambat (~20 s untuk 30 s) karena STFT/iSTFT Swift tidak dioptimasi. Sudah diperbaiki dengan vDSP (§7), tapi belum dicek ulang di iPhone.
+- Build Debug sempat lambat (~20 s untuk 30 s) karena STFT/iSTFT Swift tidak dioptimasi. Sudah diperbaiki dengan vDSP: di iPhone 17 sekarang 3,9 s (§7).
 - Memori di iPhone 17 (8 GB) aman. iPhone dengan RAM 6 GB ke bawah belum dicoba.
 - **Kalau Core ML menjalankan model di CPU** (Simulator, dan mungkin saat app di background), hasilnya tetap dipakai tapi lebih berisik: SNR 29–37 dB, level yang sama dengan hiss int8. Kebocoran tetap 0,7%. Cek di iPhone: keluar dari app saat Persiapan, lalu dengarkan hasilnya.
 - Hanya satu lagu yang diuji.
