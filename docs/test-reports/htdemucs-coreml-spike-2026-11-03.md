@@ -77,7 +77,7 @@ Metrik kebocoran: CREPE tiny (model app, keyakinan ≥ 0,5) menghitung persentas
 | Waktu 60 s (Swift, `-O`, GPU M5) | 2,3 s |
 | Ujung ke ujung `separateStems` (mp3, trim 30 s) lewat rantai Selecting | jalan, metode `.coreML` |
 | **Peak memory footprint** satu proses (model dimuat sekali) | **≈ 2,0 GB** (RSS 0,94 GB; selisihnya kemungkinan memori GPU) |
-| `xcodebuild` Simulator, `scripts/check-prep.sh` | lulus (check-prep belum mencakup htdemucs) |
+| `xcodebuild` Simulator, `scripts/check-prep.sh` | lulus, termasuk 17 cek htdemucs baru (`HTDemucsSeparationChecks`): bentuk dan round trip `DemucsSpectrogram`, panjang sample-exact, vokal + instrumental ≈ mix, cache, trim tidak valid, urutan cadangan htdemucs → Open-Unmix → center-channel |
 
 Percobaan yang tidak menolong: attention, softmax, dan layer norm di fp16 (hanya rantai GroupNorm yang fp32). Footprint tetap 2,0 GB dan waktunya justru 3,2 s, jadi tidak dipakai.
 
@@ -85,5 +85,4 @@ Percobaan yang tidak menolong: attention, softmax, dan layer norm di fp16 (hanya
 - **Memori di iPhone 15 Pro adalah risiko terbesar.** Footprint di Mac sekitar 2,0 GB, sedangkan Open-Unmix sekitar 0,4 GB. Kalau iOS menghentikan app (jetsam), app ikut mati. Ini bukan error yang ditangkap rantai cadangan. Ukur lewat Xcode Debug Navigator → Memory saat Persiapan lagu 60 s.
 - **Waktu di iPhone** (Fase 5). Di Mac M5 sekitar 2,3 s. GPU iPhone lebih lemah, tapi target PRD (< 30 s untuk 60 s) kemungkinan tetap tercapai.
 - **Kalau Core ML menjalankan model di CPU** (Simulator, dan mungkin saat app di background), hasilnya tetap dipakai tapi lebih berisik: SNR 29–37 dB, level yang sama dengan hiss int8. Kebocoran tetap 0,7%. Cek di iPhone: keluar dari app saat Persiapan, lalu dengarkan hasilnya.
-- `scripts/check-prep.sh` belum mengecek htdemucs, karena perubahan di `scripts/` perlu izin.
 - Hanya satu lagu yang diuji.
