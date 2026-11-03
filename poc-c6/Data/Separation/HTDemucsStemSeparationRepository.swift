@@ -11,6 +11,7 @@
 
 import AVFoundation
 import CoreML
+import os
 
 nonisolated final class HTDemucsStemSeparationRepository: StemSeparationRepository, @unchecked Sendable {
     /// The model's fixed window: htdemucs' training segment, 39/5 s at 44.1 kHz.
@@ -18,6 +19,10 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
     /// Sources in model output order.
     static let sources = ["drums", "bass", "other", "vocals"]
     static let vocalsSource = 3
+
+    /// Where the preparation time goes (model load, audio I/O, STFT, inference, iSTFT); a few
+    /// lines per song, also in Release builds, for device tests.
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "poc-c6", category: "Separation")
 
     private let modelURL: URL?
     private let directory: URL
@@ -46,15 +51,25 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
         let stems = SeparatedStems(mixURL: mixURL, vocalGuideURL: vocalURL, instrumentalURL: instrumentalURL, method: .coreML)
         if [mixURL, vocalURL, instrumentalURL].allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) { return stems }
 
+        let clock = ContinuousClock()
+        let loadStarted = clock.now
         let model = try loadModel()
+        let loadSeconds = (clock.now - loadStarted) / .seconds(1)
         try await Task.detached(priority: .userInitiated) {
+            let readStarted = clock.now
             let mix = try CoreMLStemSeparationRepository.readStereo(asset: asset, track: track, trim: trimRange)
+            let readSeconds = (clock.now - readStarted) / .seconds(1)
             let (vocals, instrumental) = try Self.separate(mix, model: model)
+            let writeStarted = clock.now
             let mono = [zip(vocals[0], vocals[1]).map { ($0 + $1) / 2 }]
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try CoreMLStemSeparationRepository.write(mix, to: mixURL)
             try CoreMLStemSeparationRepository.write(mono, to: vocalURL)
             try CoreMLStemSeparationRepository.write(instrumental, to: instrumentalURL)
+            Self.log.notice("""
+                htdemucs timing: model load \(loadSeconds, format: .fixed(precision: 2)) s, read audio \(readSeconds, format: .fixed(precision: 2)) s, \
+                write stems \((clock.now - writeStarted) / .seconds(1), format: .fixed(precision: 2)) s
+                """)
         }.value
         return stems
     }
@@ -100,12 +115,16 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
         let specInput = try MLMultiArray(shape: [1, 4, NSNumber(value: bins), NSNumber(value: frames)], dataType: .float32)
         let mixStrides = mixInput.strides.map(\.intValue)
         let specStrides = specInput.strides.map(\.intValue)
+        let clock = ContinuousClock()
+        var inputTime = Duration.zero, modelTime = Duration.zero, outputTime = Duration.zero
+        var chunks = 0
 
         for offset in Swift.stride(from: 0, to: length, by: stride) {
             // demucs TensorChunk.padded: a short last chunk is centred, with real audio as context.
             let count = min(segment, length - offset)
             let trim = (segment - count) / 2
             let start = offset - trim
+            let inputStarted = clock.now
             let window = channels.map { channel in
                 (0..<segment).map { j -> Float in
                     let k = start + j
@@ -125,7 +144,12 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
                 }
             }
 
+            let modelStarted = clock.now
+            inputTime += modelStarted - inputStarted
             let prediction = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["mix": mixInput, "spec": specInput]))
+            let outputStarted = clock.now
+            modelTime += outputStarted - modelStarted
+            chunks += 1
             guard let specOut = prediction.featureValue(for: "spec_out")?.multiArrayValue,
                   let waveOut = prediction.featureValue(for: "wave_out")?.multiArrayValue,
                   specOut.dataType == .float32, waveOut.dataType == .float32 else {
@@ -162,7 +186,12 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
                     }
                 }
             }
+            outputTime += clock.now - outputStarted
         }
+        log.notice("""
+            htdemucs timing: \(chunks) chunks, STFT + inputs \(inputTime / .seconds(1), format: .fixed(precision: 2)) s, \
+            model \(modelTime / .seconds(1), format: .fixed(precision: 2)) s, iSTFT + mixing \(outputTime / .seconds(1), format: .fixed(precision: 2)) s
+            """)
 
         for target in output.indices {
             for c in 0..<2 {

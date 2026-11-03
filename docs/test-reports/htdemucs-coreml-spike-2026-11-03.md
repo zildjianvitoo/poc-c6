@@ -1,6 +1,6 @@
 # Spike htdemucs → CoreML (Fase 0–4 di Mac, Fase 5 awal di iPhone 17) — 3 November 2026
 
-**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Tes pertama di iPhone 17: memori aman (puncak ~1 GB), tapi waktunya perlu dicek ulang (§7).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
+**Kesimpulan: konversi BERHASIL dan sudah terpasang di app (Fase 4, varian int8tr 58 MB). Di iPhone 17 memori aman (puncak ~1 GB) dan build Release memproses 30 s dalam ~3,6 s; build Debug jauh lebih lambat (§7).** htdemucs versi CoreML menghasilkan stem yang praktis sama dengan PyTorch. Kebocoran melodi vokal ke musik latar turun dari **4,9% (Open-Unmix sekarang) menjadi 0,7%**. Di Mac M5 waktunya 1,6–2,0 detik untuk 60 detik audio. Syaratnya: model harus dijalankan dengan **`.cpuAndGPU`**. Neural Engine dan `.all` tidak boleh dipakai (lihat §4).
 
 Angka di iPhone belum ada. Semua angka di sini dari Mac M5 (RAM 24 GB). Script ada di `prototypes/htdemucs-coreml/`.
 
@@ -98,10 +98,23 @@ Build Debug, dijalankan lewat `devicectl` dengan log `[Separation]` dari `Loggin
   3. inferensi model.
   
   Ketiganya perlu diukur terpisah sebelum memutuskan optimasi.
-- Belum diukur: lagu 60 s, run kedua saat model sudah termuat, perbandingan dengan Open-Unmix (toggle *Separate with htdemucs* di Debug Settings), build Release, dan app di background saat Persiapan.
+
+**Rincian waktu (log `htdemucs timing`):**
+| Tahap | Mac M5, `-O` (60 s) | Mac M5, `-Onone` (60 s) | **iPhone 17, Release (30 s, 6 potongan)** |
+|---|---|---|---|
+| Muat model | — | — | 0,95 s |
+| Baca audio + tulis stem | — | — | 0,07 s |
+| STFT + isi input | 0,10 s | 8,85 s | 0,05 s |
+| Model (GPU) | 2,21 s | 2,17 s | **2,36 s** (0,39 s per potongan) |
+| iSTFT + penggabungan | 0,28 s | 18,88 s | 0,14 s |
+| **Total** | 2,6 s | 30,9 s | **≈ 3,6 s** |
+
+**Kesimpulan waktu:** model di iPhone sudah cepat. Untuk 60 s (11 potongan) perkiraannya sekitar 4,5 s untuk model + 1 s muat model, jauh di bawah target 30 s. Angka 20,4 s di build Debug hampir seluruhnya berasal dari kode Swift STFT/iSTFT yang tidak dioptimasi compiler: di Mac kode ini ~70× lebih lambat dengan `-Onone`. Jadi Neural Engine atau MLX tidak diperlukan untuk mengejar target waktu.
+
+- Belum diukur: lagu 60 s di Release, perbandingan dengan Open-Unmix, dan app di background saat Persiapan.
 
 ## 8. Belum diukur / risiko
-- **Waktu di iPhone** belum memenuhi target kalau dihitung linear (lihat §7). Penyebabnya belum dipisah.
+- **Build Debug lambat** (~20 s untuk 30 s, perkiraan ~40 s untuk 60 s) karena STFT/iSTFT Swift tidak dioptimasi. Build Release tidak terkena masalah ini.
 - Memori di iPhone 17 (8 GB) aman. iPhone dengan RAM 6 GB ke bawah belum dicoba.
 - **Kalau Core ML menjalankan model di CPU** (Simulator, dan mungkin saat app di background), hasilnya tetap dipakai tapi lebih berisik: SNR 29–37 dB, level yang sama dengan hiss int8. Kebocoran tetap 0,7%. Cek di iPhone: keluar dari app saat Persiapan, lalu dengarkan hasilnya.
 - Hanya satu lagu yang diuji.
