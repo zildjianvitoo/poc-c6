@@ -15,6 +15,8 @@ import CoreML
 import os
 
 nonisolated final class HTDemucsStemSeparationRepository: StemSeparationRepository, @unchecked Sendable {
+    /// The model was trained at 44.1 kHz.
+    static let sampleRate = 44_100.0
     /// The model's fixed window: htdemucs' training segment, 39/5 s at 44.1 kHz.
     static let segmentSamples = 343_980
     /// Sources in model output order.
@@ -45,7 +47,7 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
         guard trimRange.lowerBound >= 0, trimRange.upperBound <= duration + 0.01, trimRange.upperBound > trimRange.lowerBound else {
             throw CoreMLSeparationError.invalidTrim
         }
-        let folder = directory.appendingPathComponent(CoreMLStemSeparationRepository.cacheKey(audioURL, trimRange), isDirectory: true)
+        let folder = directory.appendingPathComponent(Self.cacheKey(audioURL, trimRange), isDirectory: true)
         let mixURL = folder.appendingPathComponent("mix.wav")
         let vocalURL = folder.appendingPathComponent("vocals.wav")
         let instrumentalURL = folder.appendingPathComponent("instrumental.wav")
@@ -58,15 +60,15 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
         let loadSeconds = (clock.now - loadStarted) / .seconds(1)
         try await Task.detached(priority: .userInitiated) {
             let readStarted = clock.now
-            let mix = try CoreMLStemSeparationRepository.readStereo(asset: asset, track: track, trim: trimRange)
+            let mix = try Self.readStereo(asset: asset, track: track, trim: trimRange)
             let readSeconds = (clock.now - readStarted) / .seconds(1)
             let (vocals, instrumental) = try Self.separate(mix, model: model)
             let writeStarted = clock.now
             let mono = [zip(vocals[0], vocals[1]).map { ($0 + $1) / 2 }]
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try CoreMLStemSeparationRepository.write(mix, to: mixURL)
-            try CoreMLStemSeparationRepository.write(mono, to: vocalURL)
-            try CoreMLStemSeparationRepository.write(instrumental, to: instrumentalURL)
+            try Self.write(mix, to: mixURL)
+            try Self.write(mono, to: vocalURL)
+            try Self.write(instrumental, to: instrumentalURL)
             Self.log.notice("""
                 htdemucs timing: model load \(loadSeconds, format: .fixed(precision: 2)) s, read audio \(readSeconds, format: .fixed(precision: 2)) s, \
                 write stems \((clock.now - writeStarted) / .seconds(1), format: .fixed(precision: 2)) s
@@ -257,5 +259,58 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
             vDSP_mtrans(packed, 1, &matrix, 1, vDSP_Length(frames), vDSP_Length(bins))
         }
         return matrix
+    }
+
+    // MARK: - Audio files
+
+    private static func readStereo(asset: AVAsset, track: AVAssetTrack, trim: ClosedRange<TimeInterval>) throws -> [[Float]] {
+        guard let reader = try? AVAssetReader(asset: asset) else { throw CoreMLSeparationError.unreadable }
+        reader.timeRange = CMTimeRange(start: CMTime(seconds: trim.lowerBound, preferredTimescale: 44_100),
+                                       end: CMTime(seconds: trim.upperBound, preferredTimescale: 44_100))
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false,
+            AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: 2,
+        ])
+        guard reader.canAdd(output) else { throw CoreMLSeparationError.unreadable }
+        reader.add(output)
+        guard reader.startReading() else { throw CoreMLSeparationError.unreadable }
+        var left: [Float] = [], right: [Float] = []
+        while let buffer = output.copyNextSampleBuffer(), let block = CMSampleBufferGetDataBuffer(buffer) {
+            let length = CMBlockBufferGetDataLength(block)
+            var data = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
+            data.withUnsafeMutableBytes { _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: $0.baseAddress!) }
+            for i in stride(from: 0, to: data.count - 1, by: 2) {
+                left.append(data[i])
+                right.append(data[i + 1])
+            }
+        }
+        guard reader.status == .completed, !left.isEmpty else { throw CoreMLSeparationError.unreadable }
+        let expected = Int(((trim.upperBound - trim.lowerBound) * sampleRate).rounded())
+        return [left, right].map { channel in
+            channel.count >= expected ? Array(channel.prefix(expected)) : channel + [Float](repeating: 0, count: expected - channel.count)
+        }
+    }
+
+    private static func write(_ channels: [[Float]], to url: URL) throws {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: AVAudioChannelCount(channels.count)),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(channels[0].count)) else {
+            throw CoreMLSeparationError.unreadable
+        }
+        buffer.frameLength = AVAudioFrameCount(channels[0].count)
+        for (c, channel) in channels.enumerated() {
+            channel.withUnsafeBufferPointer { buffer.floatChannelData![c].update(from: $0.baseAddress!, count: channel.count) }
+        }
+        try? FileManager.default.removeItem(at: url)
+        try AVAudioFile(forWriting: url, settings: format.settings).write(from: buffer)
+    }
+
+    private static func cacheKey(_ url: URL, _ trim: ClosedRange<TimeInterval>) -> String {
+        let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)?.timeIntervalSince1970 ?? 0
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in "\(url.path)|\(modified)|\(trim.lowerBound)|\(trim.upperBound)".utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100000001b3
+        }
+        return String(hash, radix: 16)
     }
 }

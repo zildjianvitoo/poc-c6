@@ -2,9 +2,9 @@
 //  ShortTimeFourierTransform.swift
 //  poc-c6
 //
-//  STFT / inverse STFT matching torch.stft as used by Open-Unmix: periodic Hann window,
-//  `center = true` with reflect padding, one-sided spectrum, overlap-add inverse normalised by
-//  the summed squared window. Used by the CoreML vocal separation (Track B spike).
+//  STFT / inverse STFT matching torch.stft: periodic Hann window, `center = true` with reflect
+//  padding, one-sided spectrum, overlap-add inverse normalised by the summed squared window.
+//  DemucsSpectrogram builds the htdemucs STFT on top of it.
 //  Per-sample work is done with vDSP so Debug builds (no Swift optimisation) stay fast.
 //
 

@@ -2,15 +2,15 @@
 //  HTDemucsSeparationChecks.swift
 //  poc-c6
 //
-//  Checks for DemucsSpectrogram, HTDemucsStemSeparationRepository and the htdemucs → Open-Unmix →
-//  center-channel chain. Separation quality on a real song is measured separately
+//  Checks for DemucsSpectrogram, HTDemucsStemSeparationRepository and the separation selector
+//  (htdemucs → center-channel). Separation quality on a real song is measured separately
 //  (docs/test-reports/htdemucs-coreml-spike-2026-11-03.md).
 //
 
 import AVFoundation
 
 nonisolated enum HTDemucsSeparationChecks {
-    static func run(htDemucsModelURL: URL, openUnmixModelURL: URL) async throws -> Int {
+    static func run(htDemucsModelURL: URL) async throws -> Int {
         var count = 0
         func check(_ condition: Bool, _ message: String) throws {
             count += 1
@@ -99,31 +99,24 @@ nonisolated enum HTDemucsSeparationChecks {
             try check(false, "trim past the end must throw")
         } catch CoreMLSeparationError.invalidTrim { count += 1 }
 
-        // Chain: htdemucs first; missing htdemucs → Open-Unmix; both missing → center-channel; flag off → center-channel.
-        let openUnmixCache = directory.appendingPathComponent("openunmix")
-        let openUnmix = CoreMLStemSeparationRepository(modelURL: openUnmixModelURL, directory: openUnmixCache)
+        // Selector: htdemucs when on; missing model → center-channel; flag off → center-channel.
         let center = CenterChannelStemRepository(directory: directory.appendingPathComponent("center"))
-        let missingHTDemucs = HTDemucsStemSeparationRepository(modelURL: directory.appendingPathComponent("missing.mlmodelc"),
-                                                               directory: directory.appendingPathComponent("missing-htdemucs"))
-        let missingOpenUnmix = CoreMLStemSeparationRepository(modelURL: directory.appendingPathComponent("missing.mlmodelc"),
-                                                              directory: directory.appendingPathComponent("missing-openunmix"))
+        let missing = HTDemucsStemSeparationRepository(modelURL: directory.appendingPathComponent("missing.mlmodelc"),
+                                                       directory: directory.appendingPathComponent("missing"))
         func isInside(_ url: URL, _ folder: URL) -> Bool { url.path.hasPrefix(folder.path + "/") }
-        let first = try await SelectingStemSeparationRepository(coreML: openUnmix, centerChannel: center, useCoreML: { true }, htDemucs: repository)
+        let used = try await SelectingStemSeparationRepository(coreML: repository, centerChannel: center, useCoreML: { true })
             .separateStems(from: songURL, trimRange: 2...22)
-        try check(isInside(first.vocalGuideURL, cache), "htdemucs is tried first")
-        let second = try await SelectingStemSeparationRepository(coreML: openUnmix, centerChannel: center, useCoreML: { true }, htDemucs: missingHTDemucs)
+        try check(used.method == .coreML && isInside(used.vocalGuideURL, cache), "flag on uses htdemucs")
+        let fallback = try await SelectingStemSeparationRepository(coreML: missing, centerChannel: center, useCoreML: { true })
             .separateStems(from: songURL, trimRange: 2...22)
-        try check(second.method == .coreML && isInside(second.vocalGuideURL, openUnmixCache), "missing htdemucs falls back to Open-Unmix")
-        let third = try await SelectingStemSeparationRepository(coreML: missingOpenUnmix, centerChannel: center, useCoreML: { true }, htDemucs: missingHTDemucs)
-            .separateStems(from: songURL, trimRange: 2...22)
-        try check(third.method == .centerChannelCancellation, "both models missing falls back to center-channel")
-        let off = try await SelectingStemSeparationRepository(coreML: openUnmix, centerChannel: center, useCoreML: { false }, htDemucs: repository)
+        try check(fallback.method == .centerChannelCancellation, "missing model falls back to center-channel")
+        let off = try await SelectingStemSeparationRepository(coreML: repository, centerChannel: center, useCoreML: { false })
             .separateStems(from: songURL, trimRange: 2...22)
         try check(off.method == .centerChannelCancellation, "flag off uses center-channel")
         do {
-            _ = try await SelectingStemSeparationRepository(coreML: openUnmix, centerChannel: center, useCoreML: { true }, htDemucs: repository)
+            _ = try await SelectingStemSeparationRepository(coreML: repository, centerChannel: center, useCoreML: { true })
                 .separateStems(from: songURL, trimRange: 10...40)
-            try check(false, "invalid trim through the chain must throw")
+            try check(false, "invalid trim through the selector must throw")
         } catch CoreMLSeparationError.invalidTrim { count += 1 }
         print(String(format: "  htdemucs: 20 s in %.2f s, vocals + instrumental vs mix residual %.1f dB, spectrogram round trip %.1e",
                      seconds, residualDB, roundTrip))

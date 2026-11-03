@@ -100,11 +100,9 @@ final class AppContainer {
             configuration: store.load(),
             demo: demo,
             stemSeparation: SelectingStemSeparationRepository(
-                coreML: LoggingStemSeparationRepository(name: "Open-Unmix", wrapped: CoreMLStemSeparationRepository()),
+                coreML: LoggingStemSeparationRepository(name: "htdemucs", wrapped: HTDemucsStemSeparationRepository()),
                 centerChannel: CenterChannelStemRepository(),
-                useCoreML: { store.load().useCoreMLSeparation },
-                htDemucs: LoggingStemSeparationRepository(name: "htdemucs", wrapped: HTDemucsStemSeparationRepository()),
-                useHTDemucs: { !DebugOptions.skipsHTDemucs }),
+                useCoreML: { store.load().useCoreMLSeparation }),
             audioAnalysis: CrepeAnalysisRepository(),
             audioTransposition: AudioTranspositionRepositoryImpl(),
             vocalRange: VocalRangeRepositoryImpl(),

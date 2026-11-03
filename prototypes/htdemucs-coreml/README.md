@@ -1,8 +1,8 @@
 # htdemucs → CoreML spike
 
 Conversion and Mac measurement scripts for running Meta's **htdemucs** (Demucs v4, MIT) as a
-CoreML model, as a possible upgrade over Open-Unmix for on-device vocal separation (PRD §3,
-Track B). Results: `docs/test-reports/htdemucs-coreml-spike-2026-11-03.md`.
+CoreML model for on-device vocal separation (PRD §3). It replaced Open-Unmix in the app.
+Results: `docs/test-reports/htdemucs-coreml-spike-2026-11-03.md`.
 
 Nothing here is part of the app. The `.mlpackage` files and stems are written to
 `~/htdemucs-spike/` (override with `HTDEMUCS_WORK`), never into the repo.
@@ -21,16 +21,17 @@ is converted (`core.py`):
 Sources are `drums, bass, other, vocals`; instrumental = drums + bass + other.
 
 ## Run
-Uses the Open-Unmix spike venv (`~/umx-spike/venv`: torch 2.7, coremltools 9.0, demucs 4.1.0).
+Uses the venv from the earlier Track B spike (`~/umx-spike/venv`: torch 2.7, coremltools 9.0,
+demucs 4.1.0, plus scikit-learn for the `pal8` variant).
 Put a stereo 44.1 kHz test clip at `~/htdemucs-spike/out/clip60.wav` (never commit songs).
 
 ```bash
 P=~/umx-spike/venv/bin/python
-$P phase0_reference.py htdemucs cpu      # PyTorch reference stems (also: mps, umx, center)
+$P phase0_reference.py htdemucs cpu      # PyTorch reference stems (also: mps, center)
 $P phase1_check_wrapper.py               # split pipeline == original htdemucs
 $P phase2_convert.py mixed               # fp16 | mixed | fp32 | int8
 $P phase3_measure.py mixed CPU_AND_GPU   # 60 s: time, peak memory, SNR vs PyTorch
-$P leakage.py center umx_coreml htdemucs_torch_cpu htdemucs_mixed_CPU_AND_GPU
+$P leakage.py center htdemucs_torch_cpu htdemucs_mixed_CPU_AND_GPU
 ```
 
 ## Pitfalls found

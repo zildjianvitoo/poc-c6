@@ -59,14 +59,14 @@ Metrik kebocoran: CREPE tiny (model app, keyakinan ≥ 0,5) menghitung persentas
 - **Tes dengar (Zildjian, 3 Nov):** kualitas pemisahan mixed dan int8 sama, tapi **int8 menambah hiss sepanjang lagu**. Hiss ini cocok dengan SNR int8 yang hanya ~34 dB. Kuantisasi 8-bit di seluruh model (int8, int8out, pal8) memberi SNR 31–36 dB, jadi hiss-nya kemungkinan muncul juga di ketiganya.
 - **Lanjut ke Fase 4 dengan varian int8tr (58 MB, `.cpuAndGPU`).** Cross-transformer memegang 75% parameter dan bekerja di resolusi rendah, di tengah jaringan. Hanya bagian ini yang dibuat int8, sedangkan layer encoder dan decoder yang menyentuh audio langsung tetap fp16. Hasilnya SNR 59 dB, mendekati mixed (64,6 dB). Hiss-nya **perlu dikonfirmasi dengan didengar** (`local-songs/htdemucs-listen/5-*`). Kalau masih terdengar, pakai mixed (85 MB).
 - **Tes dengar (Zildjian, 3 Nov):** int8tr dipilih.
-- Open-Unmix tetap ada sebagai cadangan pertama, center-channel sebagai cadangan kedua.
+- **Update 3 Nov (sore):** Open-Unmix dihapus dari app (model, repository, lisensi, cek). Urutannya sekarang htdemucs → center-channel. Angka Open-Unmix di laporan ini tetap sebagai pembanding historis.
 
 ## 6. Integrasi di app (Fase 4)
 | | |
 |---|---|
 | Model | `poc-c6/Resources/HTDemucs.mlpackage` (int8tr, I/O Float32), lisensi `Licenses/Demucs-LICENSE.txt`. App Debug untuk Simulator: 24 → 86 MB |
 | Kode | `DemucsSpectrogram` (STFT/iSTFT ala demucs, di atas `ShortTimeFourierTransform`), `HTDemucsStemSeparationRepository` (chunking 7,8 s, overlap 25%, bobot segitiga, vokal = `vocals`, instrumental = drums + bass + other) |
-| Urutan | `SelectingStemSeparationRepository`: htdemucs → Open-Unmix → center-channel, semuanya di bawah flag `useCoreMLSeparation` yang sudah ada. Tidak ada flag baru (flag baru berarti mengubah kontrak `PoCConfiguration`) |
+| Urutan | `SelectingStemSeparationRepository`: htdemucs → center-channel, di bawah flag `useCoreMLSeparation` yang sudah ada (Open-Unmix sempat jadi cadangan tengah, lalu dihapus) |
 | `SeparatedStems.method` | Tetap `.coreML` (tanpa mengubah kontrak), jadi layar Ready tidak membedakan htdemucs dari Open-Unmix |
 
 **Verifikasi di Mac (harness sementara yang mengompilasi file Swift app):**

@@ -1,7 +1,7 @@
 """Melody leakage per method: share of voiced vocal-melody frames whose instrumental stem still
 carries the same note (±50 cents, CREPE tiny, confidence ≥ 0.5).
 
-  python leakage.py <method> [<method> ...]     e.g. center umx_coreml htdemucs_torch_cpu
+  python leakage.py <method> [<method> ...]     e.g. center htdemucs_torch_cpu htdemucs_int8tr_CPU_AND_GPU
 
 The melody comes from the htdemucs PyTorch vocal stem (the best estimate available) and, as a
 cross-check, from each method's own vocal stem.

@@ -2,22 +2,18 @@
 //  main.swift
 //  prep-checks
 //
-//  Runs the song-preparation checks. Arguments: compiled CrepeTiny.mlmodelc, OpenUnmixVocals.mlmodelc, HTDemucs.mlmodelc.
+//  Runs the song-preparation checks. Arguments: compiled CrepeTiny.mlmodelc, HTDemucs.mlmodelc.
 //
 
 import Foundation
 
 let modelURL = URL(fileURLWithPath: CommandLine.arguments[1])
-let separationModelURL = URL(fileURLWithPath: CommandLine.arguments[2])
-let htDemucsModelURL = URL(fileURLWithPath: CommandLine.arguments[3])
+let htDemucsModelURL = URL(fileURLWithPath: CommandLine.arguments[2])
 let suites: [(name: String, run: () async throws -> Int)] = [
     ("CenterChannelStemRepository", CenterChannelChecks.run),
     ("CrepeAnalysisRepository", { try await CrepeAnalysisChecks.run(modelURL: modelURL) }),
     ("AudioTranspositionRepositoryImpl", AudioTranspositionChecks.run),
-    ("CoreMLStemSeparationRepository", { try await CoreMLSeparationChecks.run(separationModelURL: separationModelURL) }),
-    ("HTDemucsStemSeparationRepository", {
-        try await HTDemucsSeparationChecks.run(htDemucsModelURL: htDemucsModelURL, openUnmixModelURL: separationModelURL)
-    }),
+    ("HTDemucsStemSeparationRepository", { try await HTDemucsSeparationChecks.run(htDemucsModelURL: htDemucsModelURL) }),
     ("PrepareSongUseCase (end to end)", { try await PreparationPipelineChecks.run(modelURL: modelURL) }),
 ]
 

@@ -24,18 +24,4 @@ nonisolated enum DebugOptions {
         }
         set { UserDefaults.standard.set(newValue, forKey: speakerKey) }
     }
-
-    private static let skipsHTDemucsKey = "DebugOptions.skipsHTDemucs"
-
-    /// Separates imported songs with Open-Unmix instead of htdemucs, to compare the two on a device.
-    static var skipsHTDemucs: Bool {
-        get {
-            #if DEBUG
-            UserDefaults.standard.bool(forKey: skipsHTDemucsKey)
-            #else
-            false
-            #endif
-        }
-        set { UserDefaults.standard.set(newValue, forKey: skipsHTDemucsKey) }
-    }
 }

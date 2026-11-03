@@ -13,7 +13,6 @@ WORK = Path(os.environ.get("HTDEMUCS_WORK", Path.home() / "htdemucs-spike"))
 OUT = WORK / "out"
 CLIP = OUT / "clip60.wav"
 CREPE_MODEL = REPO / "poc-c6" / "Resources" / "CrepeTiny.mlmodel"
-UMX_MODEL = REPO / "poc-c6" / "Resources" / "OpenUnmixVocals.mlpackage"
 
 SAMPLE_RATE = 44_100
 # htdemucs is evaluated on fixed 39/5 s windows (its training segment).
