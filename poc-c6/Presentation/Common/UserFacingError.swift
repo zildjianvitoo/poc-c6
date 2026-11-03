@@ -21,6 +21,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
     case recordingFailed(details: String)
     case recordingInterrupted
     case nothingToExport
+    case lyricsNotFound
+    case lyricsUnavailable
 
     var title: String {
         switch self {
@@ -37,6 +39,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .recordingFailed: "Recording stopped"
         case .recordingInterrupted: "Recording was interrupted"
         case .nothingToExport: "Nothing to export yet"
+        case .lyricsNotFound: "No lyrics found"
+        case .lyricsUnavailable: "Lyrics unavailable"
         }
     }
 
@@ -67,6 +71,10 @@ nonisolated enum UserFacingError: Equatable, Sendable {
             "A call, another app or unplugged earphones stopped the session. Your passed segments are saved."
         case .nothingToExport:
             "Pass at least one segment to make a cover."
+        case .lyricsNotFound:
+            "Check the title and artist, then search again. You can still pick a part without lyrics."
+        case .lyricsUnavailable:
+            "Lyrics couldn't be loaded right now. Check your connection and search again, or pick a part without them."
         }
     }
 
@@ -84,6 +92,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .recordingFailed: "video.slash"
         case .recordingInterrupted: "pause.circle"
         case .nothingToExport: "film.stack"
+        case .lyricsNotFound: "text.magnifyingglass"
+        case .lyricsUnavailable: "wifi.slash"
         }
     }
 

@@ -14,6 +14,7 @@ let suites: [(name: String, run: () async throws -> Int)] = [
     ("CrepeAnalysisRepository", { try await CrepeAnalysisChecks.run(modelURL: modelURL) }),
     ("AudioTranspositionRepositoryImpl", AudioTranspositionChecks.run),
     ("HTDemucsStemSeparationRepository", { try await HTDemucsSeparationChecks.run(htDemucsModelURL: htDemucsModelURL) }),
+    ("Lyrics (LRC, LRCLIB matching)", LyricsChecks.run),
     ("PrepareSongUseCase (end to end)", { try await PreparationPipelineChecks.run(modelURL: modelURL) }),
 ]
 

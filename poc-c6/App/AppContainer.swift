@@ -18,8 +18,10 @@ final class AppContainer {
     let vocalRange: any VocalRangeRepository
     /// Reads picked song files for the import screen.
     let audioInspector: any AudioFileInspecting = AudioFileInspector()
-    /// Plays prepared tracks on the Ready screen.
+    /// Plays the trim selection and prepared tracks on the Ready screen.
     let audioPreview: any AudioPreviewing = AudioPreviewPlayer()
+    /// Synced lyrics for the trim screen.
+    let lyrics: any LyricsProviding = LRCLibLyricsProvider()
     /// Microphone pitch for the vocal range test.
     let livePitch: any LivePitchSource
 

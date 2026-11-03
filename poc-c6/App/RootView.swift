@@ -94,6 +94,8 @@ struct RootView: View {
         let container = flow.container
         return ImportSongViewModel(
             inspector: container.audioInspector,
+            lyrics: container.lyrics,
+            previewer: container.audioPreview,
             prepare: PrepareSongUseCase(separation: container.stemSeparation,
                                         analysis: container.audioAnalysis,
                                         fallbackAnalysis: nil,

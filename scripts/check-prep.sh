@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Runs the song-preparation pipeline on the Mac: htdemucs (CoreML) and center-channel separation
 # with the fallback, CREPE guide
-# extraction, transposition rendering, and PrepareSongUseCase end to end.
+# extraction, transposition rendering, trim-screen lyrics (LRC parsing, LRCLIB matching), and
+# PrepareSongUseCase end to end.
 # Run before opening a PR that touches poc-c6/Data/Separation or poc-c6/Data/Audio.
 set -euo pipefail
 
@@ -24,6 +25,8 @@ xcrun swiftc -O -D DEBUG \
   "$ROOT/poc-c6/Data/Separation/SelectingStemSeparationRepository.swift" \
   "$ROOT/poc-c6/Shared/DSP/ShortTimeFourierTransform.swift" \
   "$ROOT/poc-c6/Shared/DSP/DemucsSpectrogram.swift" \
+  "$ROOT/poc-c6/Presentation/Import/LyricsProviding.swift" \
+  $(find "$ROOT/poc-c6/Data/Lyrics" -name '*.swift') \
   $(find "$ROOT/scripts/prep-checks" -name '*.swift') \
   -o "$WORK/prep-check"
 

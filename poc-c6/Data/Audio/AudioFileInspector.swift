@@ -30,8 +30,23 @@ nonisolated struct AudioFileInspector: AudioFileInspecting {
         let waveform = try await Task.detached(priority: .userInitiated) {
             try Self.readWaveform(asset: asset, track: track, duration: seconds)
         }.value
-        return ImportedAudio(url: copy, name: pickedURL.deletingPathExtension().lastPathComponent,
-                             duration: seconds, waveform: waveform)
+        let name = pickedURL.deletingPathExtension().lastPathComponent
+        let (title, artist) = await Self.titleAndArtist(asset: asset, fileName: name)
+        return ImportedAudio(url: copy, name: name, duration: seconds, waveform: waveform, title: title, artist: artist)
+    }
+
+    /// Title and artist tags when the file has both, otherwise a guess from the file name.
+    private static func titleAndArtist(asset: AVAsset, fileName: String) async -> (String, String?) {
+        let metadata = (try? await asset.load(.commonMetadata)) ?? []
+        func value(_ identifier: AVMetadataIdentifier) async -> String? {
+            guard let item = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: identifier).first,
+                  let text = try? await item.load(.stringValue)?.trimmingCharacters(in: .whitespaces), !text.isEmpty
+            else { return nil }
+            return text
+        }
+        let guess = SongTitleGuess.from(fileName: fileName)
+        guard let title = await value(.commonIdentifierTitle) else { return (guess.title, guess.artist) }
+        return (title, await value(.commonIdentifierArtist) ?? guess.artist)
     }
 
     /// Files from the picker are security-scoped and may vanish; work on a private copy.
