@@ -96,6 +96,15 @@ struct RecordingView: View {
     private var recordingOverlay: some View {
         VStack(spacing: 12) {
             topBar
+            if viewModel.supportsReferenceVocal {
+                Toggle("Reference vocal", isOn: Binding(
+                    get: { viewModel.referenceVocalEnabled },
+                    set: { viewModel.setReferenceVocalEnabled($0) }))
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.6))
+                    .accessibilityHint("Switch between reference mix and instrumental without stopping recording")
+            }
             if viewModel.isSpeakerTest {
                 Label("Speaker test mode: scores are not reliable", systemImage: "speaker.wave.3")
                     .font(.footnote)

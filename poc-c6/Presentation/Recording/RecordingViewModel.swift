@@ -58,6 +58,16 @@ final class RecordingViewModel {
     /// Enough trail for the piano roll's past window.
     private static let trailLength: TimeInterval = 2
 
+    private(set) var referenceVocalEnabled = true
+    private var karaoke: ConfigureReferenceVocalUseCase {
+        ConfigureReferenceVocalUseCase(playback: playback as? any ReferenceVocalPlayback)
+    }
+    var supportsReferenceVocal: Bool { karaoke.isAvailable }
+    func setReferenceVocalEnabled(_ enabled: Bool) {
+        referenceVocalEnabled = enabled
+        karaoke.execute(enabled: enabled)
+    }
+
     let song: PreparedSong
     private(set) var status: Status = .starting
     private(set) var loop: LoopStateController
@@ -159,7 +169,12 @@ final class RecordingViewModel {
         }
         do {
             try await capture.prepare()
-            try playback.load(earphoneMixURL: song.earphoneMixURL)
+            if karaoke.isAvailable {
+                try karaoke.load(song: song)
+                karaoke.execute(enabled: referenceVocalEnabled)
+            } else {
+                try playback.load(earphoneMixURL: song.earphoneMixURL)
+            }
             observe()
             try await capture.startRecording()
             isCapturing = true

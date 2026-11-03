@@ -86,10 +86,13 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
     static func separate(_ channels: [[Float]], model: MLModel) throws -> [[Float]] {
         let stft = ShortTimeFourierTransform()
         let bins = stft.bins
-        let spectra = channels.map { stft.forward($0) }
+        var spectra = channels.map { stft.forward($0) }
         let frames = spectra[0].count
-        let magnitudes: [[[Float]]] = spectra.map { frame in
-            frame.map { zip($0.real, $0.imaginary).map { sqrt($0 * $0 + $1 * $1) } }
+        // Calculate magnitudes on demand instead of retaining another full-song tensor.
+        func magnitude(_ channel: Int, _ frame: Int, _ bin: Int) -> Float {
+            let re = spectra[channel][frame].real[bin]
+            let im = spectra[channel][frame].imaginary[bin]
+            return sqrt(re * re + im * im)
         }
         // Mask accumulated with crossfade weights across overlapping chunks: [channel][frame][bin].
         var mask = [[[Float]]](repeating: [[Float]](repeating: [Float](repeating: 0, count: bins), count: frames), count: 2)
@@ -104,7 +107,7 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
                 for t in 0..<chunkFrames {
                     let frame = start + t
                     for b in 0..<bins {
-                        pointer[c * strides[1] + b * strides[2] + t * strides[3]] = frame < frames ? magnitudes[c][frame][b] : 0
+                        pointer[c * strides[1] + b * strides[2] + t * strides[3]] = frame < frames ? magnitude(c, frame, b) : 0
                     }
                 }
             }
@@ -122,7 +125,7 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
                 for c in 0..<2 {
                     for b in 0..<bins {
                         let value = estimatePointer[c * outStrides[1] + b * outStrides[2] + t * outStrides[3]]
-                        let m = magnitudes[c][frame][b]
+                        let m = magnitude(c, frame, b)
                         mask[c][frame][b] += w * (m > 1e-8 ? min(1, max(0, value / m)) : 0)
                     }
                 }
@@ -130,19 +133,20 @@ nonisolated final class CoreMLStemSeparationRepository: StemSeparationRepository
             if start + chunkFrames >= frames { break }
             start += step
         }
-        return (0..<2).map { c in
-            let masked = (0..<frames).map { f -> ShortTimeFourierTransform.Spectrum in
+        var separated: [[Float]] = []
+        for c in 0..<2 {
+            for f in 0..<frames {
                 let w = weight[f] > 0 ? 1 / weight[f] : 0
-                var s = spectra[c][f]
                 for b in 0..<bins {
                     let m = mask[c][f][b] * w
-                    s.real[b] *= m
-                    s.imaginary[b] *= m
+                    spectra[c][f].real[b] *= m
+                    spectra[c][f].imaginary[b] *= m
                 }
-                return s
             }
-            return stft.inverse(masked, length: channels[c].count)
+            // Inverse one channel at a time; do not construct a second spectral tensor.
+            separated.append(stft.inverse(spectra[c], length: channels[c].count))
         }
+        return separated
     }
 
     // MARK: - Audio files

@@ -42,6 +42,13 @@ nonisolated struct DetectVocalRangeUseCase: Sendable {
     mutating func ingest(_ sample: PitchSample) -> Float? {
         guard result == nil else { return result }
         let time = sample.captureTime.seconds
+        guard time.isFinite else { reset(); latestMIDI = nil; return nil }
+        // Callback gaps must break a hold even when no unvoiced frame was delivered.
+        if let lastVoicedTime, time - lastVoicedTime > Self.maxGap || time < lastVoicedTime {
+            reset()
+        }
+        // Repeated timestamps cannot contribute elapsed hold time.
+        if time == lastVoicedTime { return nil }
         guard let frequency = sample.frequency, frequency.isFinite, frequency > 0,
               sample.rmsDecibels >= configuration.noiseGateDBFS else {
             if let lastVoicedTime, time - lastVoicedTime > Self.maxGap { reset() }
