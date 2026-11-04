@@ -32,6 +32,7 @@ final class AppFlow {
         step = container.vocalRange.load() == nil ? .vocalRange : .importSong
         // Leftovers from a session that ended in a crash.
         SessionFiles.cleanUp()
+        container.modelPrewarmer?.start()
     }
 
     /// Vocal range screen (Ikzaz) saved a range.

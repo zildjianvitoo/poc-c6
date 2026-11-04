@@ -79,6 +79,15 @@ nonisolated final class HTDemucsStemSeparationRepository: StemSeparationReposito
 
     // MARK: - Model
 
+    /// Loads the model and separates one silent window, so the first song doesn't wait for the
+    /// model load and the GPU set-up (ModelPrewarmer, at app start).
+    func prewarm() throws {
+        let model = try loadModel()
+        // Shorter than one chunk stride, so it is a single model call.
+        let silence = [Float](repeating: 0, count: Self.segmentSamples / 2)
+        _ = try Self.separate([silence, silence], model: model)
+    }
+
     private func loadModel() throws -> MLModel {
         try lock.withLock {
             if let model { return model }

@@ -41,6 +41,8 @@ final class AppContainer {
     let permissions: any MediaPermissionProviding
     /// Simulator only: sings along with the fake playback so the recording loop can run.
     let simulatedSinger: SimulatedSinger?
+    /// Loads the CoreML models at app start; nil with fakes.
+    let modelPrewarmer: ModelPrewarmer?
 
     init(configuration: PoCConfiguration,
          demo: SynthesizedDemoRepository,
@@ -56,7 +58,8 @@ final class AppContainer {
          videoComposition: any VideoCompositionRepository,
          videoLibrary: any VideoLibrarySaving,
          permissions: any MediaPermissionProviding,
-         simulatedSinger: SimulatedSinger? = nil) {
+         simulatedSinger: SimulatedSinger? = nil,
+         modelPrewarmer: ModelPrewarmer? = nil) {
         self.configuration = configuration
         self.demo = demo
         self.stemSeparation = stemSeparation
@@ -72,6 +75,7 @@ final class AppContainer {
         self.videoLibrary = videoLibrary
         self.permissions = permissions
         self.simulatedSinger = simulatedSinger
+        self.modelPrewarmer = modelPrewarmer
     }
 
     /// What the app runs with: imported songs are prepared on the device (CoreML vocal separation
@@ -98,11 +102,12 @@ final class AppContainer {
         let videoComposition: any VideoCompositionRepository = VideoCompositionRepositoryImpl()
         let livePitch: any LivePitchSource = MicrophonePitchSource()
         #endif
+        let htDemucs = HTDemucsStemSeparationRepository()
         return AppContainer(
             configuration: store.load(),
             demo: demo,
             stemSeparation: SelectingStemSeparationRepository(
-                coreML: LoggingStemSeparationRepository(name: "htdemucs", wrapped: HTDemucsStemSeparationRepository()),
+                coreML: LoggingStemSeparationRepository(name: "htdemucs", wrapped: htDemucs),
                 centerChannel: CenterChannelStemRepository(),
                 useCoreML: { store.load().useCoreMLSeparation }),
             audioAnalysis: CrepeAnalysisRepository(),
@@ -116,7 +121,8 @@ final class AppContainer {
             videoComposition: videoComposition,
             videoLibrary: PhotoLibraryVideoSaver(),
             permissions: SystemMediaPermissions(),
-            simulatedSinger: singer
+            simulatedSinger: singer,
+            modelPrewarmer: ModelPrewarmer(htDemucs: htDemucs)
         )
     }
 

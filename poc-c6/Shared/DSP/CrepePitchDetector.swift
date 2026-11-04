@@ -32,6 +32,15 @@ nonisolated final class CrepePitchDetector {
     config.computeUnits = .cpuAndNeuralEngine
     model = try MLModel(contentsOf: url, configuration: config)
   }
+  /// Loads the model and runs it on a voiced tone a few times: the first CoreML predictions are
+  /// slow, and later detectors reuse the compiled model (ModelPrewarmer, at app start).
+  static func prewarm(modelURL: URL? = nil) throws {
+    let detector = try CrepePitchDetector(modelURL: modelURL)
+    let rate = 48_000.0
+    let tone = (0..<4096).map { Float(0.3 * sin(2 * Double.pi * 220 * Double($0) / rate)) }
+    for _ in 0..<3 { _ = try detector.analyze(tone, sampleRate: rate) }
+  }
+
   func detect(_ samples: [Float], sampleRate: Double) throws -> Double? {
     try analyze(samples, sampleRate: sampleRate).frequency
   }
