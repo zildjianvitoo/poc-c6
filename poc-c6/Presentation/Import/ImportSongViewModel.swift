@@ -40,6 +40,10 @@ final class ImportSongViewModel {
 
     /// How often the karaoke highlight follows the selection preview (30 fps).
     private static let playbackRefresh: Duration = .milliseconds(33)
+    /// The suggested chorus starts this much before its first line (breath, pickup notes)
+    /// and ends this much after its last sung word.
+    private static let chorusLeadIn: TimeInterval = 1
+    private static let chorusTail: TimeInterval = 1
 
     private(set) var status: Status = .idle
     var selectionStart: TimeInterval = 0 { didSet { selectionChanged() } }
@@ -50,6 +54,9 @@ final class ImportSongViewModel {
     var lyricsArtist = ""
     /// Position in the song while the selection preview plays, nil otherwise.
     private(set) var playbackTime: TimeInterval?
+    /// True once the user moved a slider; the chorus suggestion then no longer replaces their pick.
+    @ObservationIgnored private var userMovedSelection = false
+    @ObservationIgnored private var applyingSuggestion = false
 
     @ObservationIgnored private let inspector: any AudioFileInspecting
     @ObservationIgnored private let lyricsProvider: any LyricsProviding
@@ -101,6 +108,7 @@ final class ImportSongViewModel {
                 clampSelection()
                 lyricsTitle = audio.title
                 lyricsArtist = audio.artist ?? ""
+                userMovedSelection = false
                 searchLyrics()
             } catch {
                 status = .failed(Self.userFacing(error))
@@ -162,6 +170,7 @@ final class ImportSongViewModel {
                                                             duration: audio.duration)
                 try Task.checkCancellation()
                 lyrics = found.map(LyricsState.found) ?? .notFound
+                if !userMovedSelection { useChorusSuggestion() }
             } catch is CancellationError {
             } catch {
                 lyrics = .failed(.lyricsUnavailable)
@@ -169,9 +178,35 @@ final class ImportSongViewModel {
         }
     }
 
-    /// Whether a lyric line is (partly) inside the chosen part.
+    /// The chorus' first occurrence as a 15–60 s selection, if the lyrics have a repeated block.
+    var chorusSuggestion: (start: TimeInterval, length: TimeInterval)? {
+        guard let audio, case .found(let song) = lyrics, let chorus = song.chorus else { return nil }
+        let first = song.lines[chorus.lowerBound], last = song.lines[chorus.upperBound - 1]
+        let start = max(0, first.start - Self.chorusLeadIn)
+        let end = min(audio.duration, (last.words.last?.end ?? last.end) + Self.chorusTail)
+        let length = min(Self.maximumLength, max(Self.minimumLength, end - start))
+        // A chorus near the end of a song may need to start earlier to fit the minimum length.
+        return (min(start, max(0, audio.duration - length)), length)
+    }
+
+    /// Whether the selection is still the suggested chorus.
+    var isOnChorusSuggestion: Bool {
+        guard let suggestion = chorusSuggestion else { return false }
+        return abs(selectionStart - suggestion.start) < 0.05 && abs(selectionLength - suggestion.length) < 0.05
+    }
+
+    /// Selects the suggested chorus (automatically once lyrics arrive, or from "Back to Chorus").
+    func useChorusSuggestion() {
+        guard let suggestion = chorusSuggestion else { return }
+        applyingSuggestion = true
+        selectionStart = suggestion.start
+        selectionLength = suggestion.length
+        applyingSuggestion = false
+    }
+
+    /// Whether a lyric line's sung part is (partly) inside the chosen part.
     func isInSelection(_ line: LyricLine) -> Bool {
-        line.end > selectionStart && line.start < selectionStart + selectionLength
+        (line.words.last?.end ?? line.end) > selectionStart && line.start < selectionStart + selectionLength
     }
 
     /// The first line of the chosen part, to scroll to.
@@ -218,6 +253,7 @@ final class ImportSongViewModel {
 
     private func selectionChanged() {
         clampSelection()
+        if !applyingSuggestion, audio != nil { userMovedSelection = true }
         // Moving the selection ends the preview of the old part.
         if isPlayingSelection { stopSelectionPreview() }
     }

@@ -95,6 +95,19 @@ struct ImportSongView: View {
             }
             .monospacedDigit()
 
+            if viewModel.chorusSuggestion != nil {
+                if viewModel.isOnChorusSuggestion {
+                    Label("Suggested: the chorus, the part that repeats most", systemImage: "sparkles")
+                        .font(.footnote)
+                        .foregroundStyle(.tint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Button("Back to Chorus", systemImage: "arrow.uturn.backward") { viewModel.useChorusSuggestion() }
+                        .font(.footnote)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
             Button {
                 viewModel.toggleSelectionPreview()
             } label: {

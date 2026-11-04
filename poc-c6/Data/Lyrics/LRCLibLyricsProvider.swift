@@ -45,7 +45,8 @@ nonisolated final class LRCLibLyricsProvider: LyricsProviding, @unchecked Sendab
         var result: SongLyrics?
         for query in queries {
             if let match = Self.bestMatch(try await search(query), duration: duration) {
-                result = SongLyrics(lines: LRCLyricsParser.lines(from: match.syncedLyrics ?? "", duration: duration),
+                let lines = LRCLyricsParser.lines(from: match.syncedLyrics ?? "", duration: duration)
+                result = SongLyrics(lines: lines, chorus: ChorusFinder.chorus(in: lines),
                                     matchedTitle: match.trackName, matchedArtist: match.artistName)
                 break
             }

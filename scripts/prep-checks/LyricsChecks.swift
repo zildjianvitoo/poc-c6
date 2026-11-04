@@ -3,7 +3,8 @@
 //  poc-c6
 //
 //  Checks for the trim-screen lyrics: LRC parsing, word-time estimates, title/artist guesses from
-//  file names and picking the LRCLIB version that matches the file's duration. No network.
+//  file names, picking the LRCLIB version that matches the file's duration, and finding the chorus.
+//  No network.
 //
 
 import Foundation
@@ -61,6 +62,23 @@ nonisolated enum LyricsChecks {
             let guess = SongTitleGuess.from(fileName: fileName)
             try check(guess.title == title && guess.artist == artist, "\(fileName) → \(guess)")
         }
+
+        // Chorus: the most repeated block of 2+ lines, first occurrence; fillers and single lines don't count.
+        func song(_ texts: [String]) -> [LyricLine] {
+            texts.enumerated().map { LyricLine(id: $0.offset, text: $0.element, start: Double($0.offset) * 4,
+                                               end: Double($0.offset + 1) * 4, words: []) }
+        }
+        let verse = ["Walking down the road", "Thinking of you"]
+        let chorus = ["This is the chorus,", "SING it loud", "Every night"]
+        let structure = verse + chorus + ["Second verse here", "Something new"] + chorus + ["Oh oh oh", "Oh oh oh"]
+            + ["Bridge line"] + chorus.map { $0.lowercased() } + ["Outro"]
+        try check(ChorusFinder.chorus(in: song(structure)) == 2..<5, "chorus = repeated 3-line block, case/punctuation ignored")
+        try check(ChorusFinder.chorus(in: song(["Oh oh", "Oh oh", "Oh oh", "Oh oh", "Line a", "Line b"])) == nil,
+                  "filler-only repeats are not a chorus")
+        try check(ChorusFinder.chorus(in: song(["Same line", "Other", "Same line", "Different"])) == nil,
+                  "a single repeated line is not a chorus")
+        try check(ChorusFinder.chorus(in: song(verse + ["Ábadi untuk selamanya", "Selama-lamanya"] + verse + ["Abadi untuk selamanya", "selama lamanya"])) != nil,
+                  "accents and hyphens are ignored when matching")
 
         // Version choice: synced, not instrumental, closest duration within the tolerance.
         func record(_ duration: Double, synced: Bool = true, instrumental: Bool = false) -> LRCLibLyricsProvider.Record {
