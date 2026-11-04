@@ -30,6 +30,7 @@ nonisolated final class VideoCompositionRepositoryImpl: VideoCompositionReposito
             throw CompingError.exportUnavailable
         }
         session.audioMix = output.audioMix
+        session.videoComposition = output.videoComposition
         session.timeRange = CMTimeRange(start: .zero,
                                         end: CMTime(seconds: plan.endTime, preferredTimescale: CompingCompositionBuilder.timescale))
 

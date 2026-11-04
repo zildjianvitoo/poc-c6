@@ -4,7 +4,8 @@
 //
 //  Compiled with poc-c6/Domain and poc-c6/Data/Composition by scripts/check-comping.sh.
 //  Builds a synthetic raw recording whose frames and audio encode their own raw time,
-//  runs the real comping code on the Mac, and checks the result (PRD §10.2–10.4, §10.7).
+//  runs the real comping code on the Mac, and checks the result (PRD §10.2–10.4, §10.7),
+//  including the video dissolve and vocal crossfade at each cut.
 //
 
 import AVFoundation
@@ -144,18 +145,31 @@ func plan(takeCount: Int, rawURL: URL, instrumentalURL: URL, instrumentalGain: F
 
 // MARK: - Reading the result back
 
-func decodeFrameIndex(_ asset: AVAsset, at seconds: TimeInterval) async throws -> Int {
-    let generator = AVAssetImageGenerator(asset: asset)
-    generator.requestedTimeToleranceBefore = .zero
-    generator.requestedTimeToleranceAfter = .zero
-    let (image, _) = try await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 600))
-    var pixel = [UInt8](repeating: 0, count: 4)
-    let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
-                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    context.draw(image, in: CGRect(x: -image.width / 2, y: -image.height / 2, width: image.width, height: image.height))
-    let red = Int((Double(pixel[0]) / 8).rounded()), green = Int((Double(pixel[1]) / 8).rounded())
-    return green * 32 + red
+/// Centre pixel (RGB) of every frame, by presentation time. Read straight from the decoder:
+/// image generators colour-manage tagged (exported) and untagged (synthetic raw) files differently.
+func centerColors(_ asset: AVAsset) async throws -> [(time: TimeInterval, rgb: [Int])] {
+    let track = try await asset.loadTracks(withMediaType: .video)[0]
+    let reader = try AVAssetReader(asset: asset)
+    let output = AVAssetReaderTrackOutput(track: track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+    reader.add(output)
+    reader.startReading()
+    var frames: [(TimeInterval, [Int])] = []
+    while let buffer = output.copyNextSampleBuffer(), let pixels = CMSampleBufferGetImageBuffer(buffer) {
+        CVPixelBufferLockBaseAddress(pixels, .readOnly)
+        let row = CVPixelBufferGetBytesPerRow(pixels)
+        let center = CVPixelBufferGetBaseAddress(pixels)!.assumingMemoryBound(to: UInt8.self)
+            + CVPixelBufferGetHeight(pixels) / 2 * row + CVPixelBufferGetWidth(pixels) / 2 * 4
+        frames.append((CMSampleBufferGetPresentationTimeStamp(buffer).seconds, [Int(center[2]), Int(center[1]), Int(center[0])]))
+        CVPixelBufferUnlockBaseAddress(pixels, .readOnly)
+    }
+    return frames
 }
+
+func color(at seconds: TimeInterval, in frames: [(time: TimeInterval, rgb: [Int])]) -> [Int] {
+    frames.min { abs($0.time - seconds) < abs($1.time - seconds) }!.rgb
+}
+
+func distance(_ a: [Int], _ b: [Int]) -> Int { zip(a, b).map { abs($0 - $1) }.reduce(0, +) }
 
 func decodeAudio(_ asset: AVAsset) async throws -> [Float] {
     let track = try await asset.loadTracks(withMediaType: .audio)[0]
@@ -219,21 +233,36 @@ Task {
         check("duration", abs(duration - 16) < 0.05, String(format: "%.3f s (expected 16.000)", duration))
         check("export time", exportSeconds < 32, String(format: "%.1f s for a 16 s clip (limit 2×)", exportSeconds))
 
-        // Compare each output frame with the raw frames around where it should come from.
-        // (Color -> index decoding is shifted by the YUV round trip, so compare codes, not absolute indices.)
-        let raw = AVURLAsset(url: rawURL)
+        // Compare each output frame with the raw frames around where it should come from (every raw
+        // frame has its own colour; the YUV round trip moves colours by a few levels).
+        let rawFrames = try await centerColors(AVURLAsset(url: rawURL))
+        let fullFrames = try await centerColors(full)
+        let sameFrame = 12
         var worstFrameError = 0
-        for songTime in [0.5, 3.3, 5.9, 6.1, 7.5, 8.9, 9.1, 12.0, 15.8] {
+        // Just outside each dissolve (crossfade / 2 either side of the 6 s and 9 s cuts).
+        let edge = crossfade / 2 + 1.5 / Double(frameRate)
+        for songTime in [0.5, 3.3, 6 - edge, 6 + edge, 7.5, 9 - edge, 9 + edge, 12.0, 15.8] {
             let expectedRaw = rawTime(forSongTime: songTime)!
-            let actual = try await decodeFrameIndex(full, at: songTime)
-            var matchedOffset: Int?
-            for offset in [0, -1, 1, -2, 2] {
-                let candidate = try await decodeFrameIndex(raw, at: expectedRaw + Double(offset) / Double(frameRate))
-                if candidate == actual { matchedOffset = offset; break }
+            let actual = color(at: songTime, in: fullFrames)
+            let matchedOffset = [0, -1, 1, -2, 2].first { offset in
+                distance(color(at: expectedRaw + Double(offset) / Double(frameRate), in: rawFrames), actual) <= sameFrame
             }
             worstFrameError = max(worstFrameError, matchedOffset.map(abs) ?? 99)
         }
         check("cut accuracy", worstFrameError <= 1, "worst error \(worstFrameError) frame(s) over 9 probes, incl. both sides of each cut")
+
+        // Dissolve: the frame on a cut is a mix of the outgoing and the incoming take.
+        let dissolveErrors = [6.0, 9.0].map { cut -> (blend: Int, outgoing: Int, incoming: Int) in
+            let index = segments.firstIndex { abs($0.audioEndTime - cut) < 1e-6 }!
+            let outgoing = color(at: takeStartsInRaw[index] + segments[index].audioDuration, in: rawFrames)
+            let incoming = color(at: takeStartsInRaw[index + 1], in: rawFrames)
+            let actual = color(at: cut, in: fullFrames)
+            let mix = zip(outgoing, incoming).map { ($0 + $1) / 2 }
+            return (distance(actual, mix), distance(actual, outgoing), distance(actual, incoming))
+        }
+        check("video dissolve", dissolveErrors.allSatisfy { $0.blend < min($0.outgoing, $0.incoming) },
+              "frame on each cut is closer to the A/B mix than to either take: " + dissolveErrors.map {
+                  "mix \($0.blend) vs A \($0.outgoing) / B \($0.incoming)" }.joined(separator: ", "))
 
         let audio = try await decodeAudio(full)
         let found = clickTimes(in: audio)
