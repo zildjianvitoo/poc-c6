@@ -2,72 +2,39 @@
 //  SimplifyGuideUseCase.swift
 //  poc-c6
 //
-//  Turns raw extracted guide notes into fewer, longer blocks that a singer can follow
-//  (feedback from device testing 2026-11-01: a phrase came out as many tiny, separated
-//  blocks). Neighbours within a semitone are merged, short gaps are bridged, and isolated
-//  blips are dropped. Applied after ExtractGuideNotesUseCase for imported songs.
+//  Repair brief guide fragmentation while preserving real melody changes and short notes.
 //
 
 import Foundation
 
 nonisolated struct SimplifyGuideUseCase: Sendable {
-    /// Notes this close in time and within `mergeInterval` semitones become one block.
-    static let mergeGap: TimeInterval = 0.35
-    static let mergeInterval = 1
-    /// Gaps up to this long between different notes are closed (legato), so the block runs on.
-    static let bridgeGap: TimeInterval = 0.3
-    /// An isolated note shorter than this (after merging) is dropped as a blip.
-    static let minimumIsolatedDuration: TimeInterval = 0.25
+    var configuration: PoCConfiguration = .default
 
-    private struct Block {
-        var start: TimeInterval
-        var end: TimeInterval
-        /// Total duration per MIDI note inside the block, to pick its dominant pitch.
-        var weights: [Int: TimeInterval]
-        var midi: Int { weights.max { $0.value == $1.value ? $0.key > $1.key : $0.value < $1.value }?.key ?? 0 }
-    }
-
-    /// Input sorted or not; output sorted by `startTime`, monophonic, original key.
     func execute(_ notes: [TargetMIDINote]) -> [TargetMIDINote] {
-        var blocks = notes.sorted { $0.startTime < $1.startTime }.map {
-            Block(start: $0.startTime, end: $0.endTime, weights: [$0.midiNote: $0.duration])
-        }
+        let repaired = notes.filter {
+            $0.startTime.isFinite && $0.duration.isFinite && $0.endTime.isFinite
+                && $0.duration >= ExtractGuideNotesUseCase.minimumNoteDuration - ContractTolerance.timeline
+        }.sorted { $0.startTime < $1.startTime }
 
-        // 1. Merge neighbours that are close in time and pitch, until nothing changes.
-        var merged = true
-        while merged {
-            merged = false
-            var result: [Block] = []
-            for block in blocks {
-                if var last = result.last, block.start - last.end <= Self.mergeGap,
-                   abs(block.midi - last.midi) <= Self.mergeInterval {
-                    last.end = max(last.end, block.end)
-                    for (midi, weight) in block.weights { last.weights[midi, default: 0] += weight }
-                    result[result.count - 1] = last
-                    merged = true
-                } else {
-                    result.append(block)
-                }
+        // Merge only equal pitches. A semitone difference can be a real melody change,
+        // even in a short note, so it must not be flattened into its neighbours.
+        var merged: [TargetMIDINote] = []
+        for note in repaired {
+            if let last = merged.last, last.midiNote == note.midiNote,
+               note.startTime - last.endTime <= configuration.guideMergeGap {
+                merged[merged.count - 1] = TargetMIDINote(id: last.id, midiNote: last.midiNote,
+                    startTime: last.startTime, duration: max(last.endTime, note.endTime) - last.startTime)
+            } else { merged.append(note) }
+        }
+        // Keep existing legato repair for short pauses. Long rests remain empty.
+        for index in merged.indices.dropLast() {
+            let note = merged[index], next = merged[index + 1]
+            let gap = next.startTime - note.endTime
+            if gap >= 0, gap <= configuration.guideBridgeGap {
+                merged[index] = TargetMIDINote(id: note.id, midiNote: note.midiNote,
+                                               startTime: note.startTime, duration: next.startTime - note.startTime)
             }
-            blocks = result
         }
-
-        // 2. Drop isolated blips (far from both neighbours and short).
-        blocks = blocks.enumerated().filter { index, block in
-            guard block.end - block.start < Self.minimumIsolatedDuration else { return true }
-            let gapBefore = index > 0 ? block.start - blocks[index - 1].end : .infinity
-            let gapAfter = index + 1 < blocks.count ? blocks[index + 1].start - block.end : .infinity
-            return gapBefore <= Self.bridgeGap || gapAfter <= Self.bridgeGap
-        }.map(\.element)
-
-        // 3. Bridge short gaps so consecutive blocks run on (legato).
-        for index in blocks.indices.dropLast() where blocks[index + 1].start - blocks[index].end <= Self.bridgeGap {
-            blocks[index].end = blocks[index + 1].start
-        }
-
-        return blocks.compactMap { block in
-            guard block.end > block.start else { return nil }
-            return TargetMIDINote(midiNote: block.midi, startTime: block.start, duration: block.end - block.start)
-        }
+        return merged
     }
 }

@@ -4,7 +4,7 @@
 //
 //  Turns a fixed-hop pitch track of the vocal guide into monophonic target notes
 //  (PRD §5.3, CREPE fallback): unvoiced below the confidence threshold, stable regions
-//  (±50 cents around their median) of at least 120 ms become notes, same-pitch notes
+//  (a pitch interval narrower than one semitone) of at least 120 ms become notes, same-pitch notes
 //  closer than 50 ms are merged. Pure: no audio or CoreML here.
 //
 
@@ -41,9 +41,11 @@ nonisolated struct ExtractGuideNotesUseCase: Sendable {
     private static let epsilon: TimeInterval = 1e-6
 
     let hop: TimeInterval
+    let configuration: PoCConfiguration
 
-    init(hop: TimeInterval = ExtractGuideNotesUseCase.defaultHop) {
+    init(hop: TimeInterval = ExtractGuideNotesUseCase.defaultHop, configuration: PoCConfiguration = .default) {
         self.hop = hop
+        self.configuration = configuration
     }
 
     /// Notes in the original key, sorted by `startTime`, non-overlapping, each with `duration > 0`.
@@ -58,7 +60,7 @@ nonisolated struct ExtractGuideNotesUseCase: Sendable {
 
         var regions: [[GuidePitchFrame]] = []
         var current: [GuidePitchFrame] = []
-        for frame in voiced {
+        for frame in stabilised(voiced) {
             if let last = current.last {
                 let contiguous = frame.time - last.time <= hop * Self.maxFrameSkip + Self.epsilon
                 if contiguous, fitsRegion(current + [frame]) {
@@ -102,9 +104,30 @@ nonisolated struct ExtractGuideNotesUseCase: Sendable {
         return result
     }
 
+    /// Offline centred median: removes isolated salience spikes and vibrato fragmentation
+    /// without shifting sustained note onsets. Never borrow pitch through a long/unvoiced gap.
+    private func stabilised(_ frames: [GuidePitchFrame]) -> [GuidePitchFrame] {
+        frames.indices.map { index in
+            let frame = frames[index]
+            let neighbours = max(0, index - configuration.guideMedianRadius)...min(frames.count - 1, index + configuration.guideMedianRadius)
+            let values = neighbours.compactMap { neighbour -> Float? in
+                let other = frames[neighbour]
+                guard abs(other.time - frame.time) <= hop * Self.maxFrameSkip + Self.epsilon else { return nil }
+                return other.midi
+            }.sorted()
+            let middle = values.count / 2
+            let pitch = values.count.isMultiple(of: 2) ? (values[middle - 1] + values[middle]) / 2 : values[middle]
+            return GuidePitchFrame(time: frame.time, midi: pitch, confidence: frame.confidence)
+        }
+    }
+
     private func fitsRegion(_ region: [GuidePitchFrame]) -> Bool {
-        let center = median(region)
-        return region.allSatisfy { abs(($0.midi ?? center) - center) <= Self.stabilityTolerance }
+        let pitches = region.compactMap(\.midi)
+        guard let low = pitches.min(), let high = pitches.max() else { return false }
+        // Testing against a running median splits an otherwise stable vibrato whenever
+        // one half-cycle briefly has the majority. Bound the full pitch interval instead.
+        // Strictly below one semitone keeps genuine adjacent-semitone notes separate.
+        return high - low < 2 * Self.stabilityTolerance - Float(Self.epsilon)
     }
 
     private func median(_ region: [GuidePitchFrame]) -> Float {

@@ -15,7 +15,7 @@ nonisolated final class AudioRouteMonitorImpl: AudioRouteMonitor, @unchecked Sen
     var currentRoute: AudioOutputRoute {
         let ports = AVAudioSession.sharedInstance().currentRoute.outputs.map(\.portType)
         if ports.contains(.builtInSpeaker) || ports.contains(.builtInReceiver) { return .speaker }
-        if ports.contains(.bluetoothA2DP) || ports.contains(.bluetoothLE) { return .bluetooth }
+        if ports.contains(.bluetoothA2DP) || ports.contains(.bluetoothHFP) || ports.contains(.bluetoothLE) { return .bluetooth }
         if ports.contains(.headphones) || ports.contains(.usbAudio) { return .wired }
         return .other
     }

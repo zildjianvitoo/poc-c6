@@ -20,8 +20,8 @@ nonisolated enum GuideAndPitchChecks {
         }
         let simplify = SimplifyGuideUseCase()
 
-        // A phrase that came out as fragments of nearly the same pitch becomes one block.
-        let fragments = [note(60, 0.0, 0.2), note(61, 0.35, 0.2), note(60, 0.75, 0.3), note(60, 1.3, 0.25)]
+        // A phrase that came out as fragments of the same pitch becomes one block.
+        let fragments = [note(60, 0.0, 0.2), note(60, 0.35, 0.2), note(60, 0.75, 0.3), note(60, 1.3, 0.25)]
         let one = simplify.execute(fragments)
         try check(one.count == 1 && one[0].midiNote == 60, "fragments → one block: \(one.map(\.midiNote))")
         try check(abs(one[0].startTime) < 1e-9 && abs(one[0].endTime - 1.55) < 1e-9, "block spans the phrase")
@@ -31,10 +31,10 @@ nonisolated enum GuideAndPitchChecks {
         try check(steps.map(\.midiNote) == [60, 64, 67], "steps keep their pitches")
         try check(abs(steps[0].endTime - steps[1].startTime) < 1e-9, "gap bridged")
 
-        // A lonely short blip is dropped; a long gap is kept.
+        // A valid short note is retained; a long gap is kept.
         let blip = simplify.execute([note(60, 0, 1.0), note(72, 2.0, 0.15), note(62, 4.0, 1.0)])
-        try check(blip.map(\.midiNote) == [60, 62], "blip dropped: \(blip.map(\.midiNote))")
-        try check(blip[0].endTime < blip[1].startTime - 1, "long gap kept")
+        try check(blip.map(\.midiNote) == [60, 72, 62], "short note retained: \(blip.map(\.midiNote))")
+        try check(blip[0].endTime < blip[2].startTime - 1, "long gap kept")
         try check(simplify.execute([]).isEmpty, "empty stays empty")
 
         // Octave-agnostic scoring.

@@ -12,6 +12,5 @@ extension PoCConfiguration {
     nonisolated var rangePenaltySpanDivisor: Double { 4 }
     nonisolated var speakingSampleDuration: TimeInterval { 6 }
     nonisolated var minimumSpeakingVoicedDuration: TimeInterval { 2 }
-    nonisolated var rangeConfirmationTolerance: Float { 1 }
     nonisolated var minimumVocalRangeSpan: Float { 3 }
 }

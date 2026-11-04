@@ -22,7 +22,7 @@ nonisolated enum UserFacingError: Equatable, Sendable {
     case recordingInterrupted
     case nothingToExport
     case vocalRangeCaptureFailed
-    case vocalRangeConfirmationFailed
+    case headsetMicrophoneRequired
     case vocalRangeTooNarrow
     case keyPreviewFailed
     case keyPreparationFailed
@@ -43,7 +43,7 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .recordingInterrupted: "Recording was interrupted"
         case .nothingToExport: "Nothing to export yet"
         case .vocalRangeCaptureFailed: "We couldn't capture your voice"
-        case .vocalRangeConfirmationFailed: "Let's confirm that note again"
+        case .headsetMicrophoneRequired: "Connect a headset microphone"
         case .vocalRangeTooNarrow: "Try a higher comfortable note"
         case .keyPreviewFailed: "The preview couldn't play"
         case .keyPreparationFailed: "The keys couldn't be prepared"
@@ -79,8 +79,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
             "Pass at least one segment to make a cover."
         case .vocalRangeCaptureFailed:
             "Try again in a quiet place. Speak naturally for the reading, and hold each sung note steadily without straining."
-        case .vocalRangeConfirmationFailed:
-            "Sing the same comfortable note again. If it feels strained, start over with a smaller range."
+        case .headsetMicrophoneRequired:
+            "Connect wired or Bluetooth earphones with a microphone, then try again. Headphones that only play audio can't be used as a microphone."
         case .vocalRangeTooNarrow:
             "Your highest note must be above your lowest note. Stay comfortable and don't force your voice."
         case .keyPreviewFailed:
@@ -104,7 +104,8 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .recordingFailed: "video.slash"
         case .recordingInterrupted: "pause.circle"
         case .nothingToExport: "film.stack"
-        case .vocalRangeCaptureFailed, .vocalRangeConfirmationFailed, .vocalRangeTooNarrow: "mic.badge.xmark"
+        case .vocalRangeCaptureFailed, .vocalRangeTooNarrow: "mic.badge.xmark"
+        case .headsetMicrophoneRequired: "headphones"
         case .keyPreviewFailed: "speaker.slash"
         case .keyPreparationFailed: "music.note.list"
         }

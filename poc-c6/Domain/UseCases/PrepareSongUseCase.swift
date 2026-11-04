@@ -17,7 +17,7 @@ nonisolated struct PrepareSongUseCase: Sendable {
                  progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> PreparedSong {
         let (stems, extracted) = try await extract(audioURL: audioURL, trimRange: trimRange, progress: progress)
         // Fewer, longer blocks that a singer can follow (device feedback 2026-11-01).
-        let notes = SimplifyGuideUseCase().execute(extracted)
+        let notes = SimplifyGuideUseCase(configuration: configuration).execute(extracted)
         guard !notes.isEmpty else {
             throw ContractViolation(contract: "Preparation", message: "We couldn't find a vocal melody in this section. Try another part of the song.")
         }
@@ -71,7 +71,7 @@ nonisolated struct PrepareSongUseCase: Sendable {
         let recommender = RecommendKeysUseCase(configuration: configuration)
         let recommendations = try recommender.execute(notes: original, vocalRange: vocalRange)
         let excerpt = recommender.highestPhrase(notes: original, duration: duration)
-        let segments = try slicer.execute(notes: SimplifyGuideUseCase().execute(original), duration: duration)
+        let segments = try slicer.execute(notes: SimplifyGuideUseCase(configuration: configuration).execute(original), duration: duration)
         var options: [Choices.Option] = []
         for (index, recommendation) in recommendations.enumerated() {
             try Task.checkCancellation()

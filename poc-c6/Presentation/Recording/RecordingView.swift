@@ -96,6 +96,13 @@ struct RecordingView: View {
     private var recordingOverlay: some View {
         VStack(spacing: 12) {
             topBar
+            if let microphone = viewModel.microphoneName {
+                Label("Microphone: \(microphone)", systemImage: "headphones")
+                    .font(.footnote)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.6), in: .capsule)
+            }
             if viewModel.supportsReferenceVocal {
                 Toggle("Reference vocal", isOn: Binding(
                     get: { viewModel.referenceVocalEnabled },

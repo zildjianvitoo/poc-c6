@@ -10,7 +10,7 @@ import Observation
 @Observable
 final class VocalRangeViewModel {
     enum Prompt: Int, Equatable, CaseIterable {
-        case speaking, lowest, confirmLowest, highest, confirmHighest
+        case speaking, lowest, highest
     }
 
     enum Status: Equatable {
@@ -28,6 +28,7 @@ final class VocalRangeViewModel {
     private(set) var baselineMIDI: Float?
     private(set) var lowestMIDI: Float?
     private(set) var highestMIDI: Float?
+    private(set) var microphoneName: String?
 
     @ObservationIgnored private let source: any LivePitchSource
     @ObservationIgnored private let repository: any VocalRangeRepository
@@ -48,9 +49,7 @@ final class VocalRangeViewModel {
         switch prompt {
         case .speaking: "Read aloud in your normal speaking voice"
         case .lowest: "Hum your lowest comfortable note"
-        case .confirmLowest: "Sing that low note again"
         case .highest: "Sing your highest comfortable note"
-        case .confirmHighest: "Sing that high note again"
         }
     }
 
@@ -59,11 +58,9 @@ final class VocalRangeViewModel {
         case .speaking:
             "The sky looks so beautiful this morning, with soft clouds floating across the blue sky. A gentle breeze comes through the trees, and the air feels cool and refreshing."
         case .lowest:
-            "Start near your speaking note and gently hum downward. Hold a comfortable low note for about 2 seconds."
+            "Start near your speaking note and gently hum downward. Hold a comfortable low note for about 1 second."
         case .highest:
-            "Try a gentle ‘woo-hoo’, then hold a comfortable high note for about 2 seconds. Don't shout or strain."
-        case .confirmLowest, .confirmHighest:
-            "Use an easy ‘ah’ and hold the same note for about 2 seconds to confirm you can sing it comfortably."
+            "Try a gentle ‘woo-hoo’, then hold a comfortable high note for about 1 second. Don't shout or strain."
         }
     }
 
@@ -71,9 +68,8 @@ final class VocalRangeViewModel {
     var nextTitle: String {
         switch prompt {
         case .speaking: "Next: Lowest Note"
-        case .lowest: "Confirm Lowest Note"
-        case .confirmLowest: "Next: Highest Note"
-        case .highest, .confirmHighest: "Confirm Highest Note"
+        case .lowest: "Next: Highest Note"
+        case .highest: "Save and Continue"
         }
     }
 
@@ -81,12 +77,15 @@ final class VocalRangeViewModel {
         stopListening()
         let token = generation
         status = .listening
+        microphoneName = nil
         holdProgress = 0
         liveMIDI = nil
         listening = Task { [weak self] in
             guard let self else { return }
             do {
                 let samples = try await source.start()
+                microphoneName = (source as? any MicrophoneInputProviding)?.microphoneName
+                var display = StabilizePitchDisplayUseCase(configuration: configuration)
                 var detector = DetectVocalRangeUseCase(configuration: configuration)
                 var speech: [Float] = []
                 var start: TimeInterval?
@@ -97,13 +96,14 @@ final class VocalRangeViewModel {
                         guard time.isFinite else { continue }
                         if start == nil { start = time }
                         holdProgress = min(1, max(0, time - (start ?? time)) / configuration.speakingSampleDuration)
-                        liveMIDI = nil
+                        var spokenMIDI: Float?
                         if let frequency = sample.frequency, frequency.isFinite, frequency > 0,
                            sample.rmsDecibels >= configuration.noiseGateDBFS {
                             let midi = 69 + 12 * log2(frequency / 440)
-                            liveMIDI = midi
+                            spokenMIDI = midi
                             speech.append(midi)
                         }
+                        liveMIDI = display.execute(midi: spokenMIDI, time: time)
                         if holdProgress >= 1 {
                             guard Double(speech.count) * configuration.pitchHop >= configuration.minimumSpeakingVoicedDuration else {
                                 status = .failed(.vocalRangeCaptureFailed)
@@ -116,16 +116,19 @@ final class VocalRangeViewModel {
                         }
                     } else {
                         let note = detector.ingest(sample)
-                        liveMIDI = detector.latestMIDI
+                        liveMIDI = display.execute(midi: detector.latestMIDI, time: sample.captureTime.seconds)
                         holdProgress = min(1, detector.stableDuration / DetectVocalRangeUseCase.requiredDuration)
                         if let note { captured(note); break }
                     }
                 }
                 guard generation == token, !Task.isCancelled else { return }
-                if case .listening = status { status = .failed(.vocalRangeCaptureFailed) }
+                if case .listening = status {
+                    let input = source as? any MicrophoneInputProviding
+                    status = .failed(input?.isHeadsetMicrophoneActive == false ? .headsetMicrophoneRequired : .vocalRangeCaptureFailed)
+                }
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
-                status = .failed(.vocalRangeCaptureFailed)
+                status = .failed((error as? any UserFacingConvertible)?.userFacingError ?? .vocalRangeCaptureFailed)
             }
             if generation == token { source.stop() }
         }
@@ -152,6 +155,7 @@ final class VocalRangeViewModel {
         baselineMIDI = nil
         lowestMIDI = nil
         highestMIDI = nil
+        microphoneName = nil
         status = .idle
     }
 
@@ -169,31 +173,13 @@ final class VocalRangeViewModel {
             baselineMIDI = note
         case .lowest:
             lowestMIDI = note
-        case .confirmLowest:
-            guard let low = lowestMIDI, abs(note - low) <= configuration.rangeConfirmationTolerance else {
-                status = .failed(.vocalRangeConfirmationFailed)
-                return
-            }
-            // The repeated note must be reachable too; keep the conservative bound.
-            lowestMIDI = max(low, note)
         case .highest:
             guard let low = lowestMIDI, note - low >= configuration.minimumVocalRangeSpan else {
                 status = .failed(.vocalRangeTooNarrow)
                 return
             }
             highestMIDI = note
-        case .confirmHighest:
-            guard let high = highestMIDI, let low = lowestMIDI,
-                  abs(note - high) <= configuration.rangeConfirmationTolerance else {
-                status = .failed(.vocalRangeConfirmationFailed)
-                return
-            }
-            let confirmedHigh = min(high, note)
-            guard confirmedHigh - low >= configuration.minimumVocalRangeSpan else {
-                status = .failed(.vocalRangeTooNarrow)
-                return
-            }
-            status = .finished(VocalRange(lowestMIDI: low, highestMIDI: confirmedHigh))
+            status = .finished(VocalRange(lowestMIDI: low, highestMIDI: note))
             return
         }
         status = .captured(note)

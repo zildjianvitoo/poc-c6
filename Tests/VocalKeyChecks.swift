@@ -7,19 +7,26 @@ import Synchronization
 nonisolated final class ScriptedPitchSource: LivePitchSource {
     var notes: [Float?]
     private var index = 0
+    private var frames: [Float?]?
     init(_ notes: [Float?]) { self.notes = notes }
+    init(frames: [Float?]) { self.notes = [nil]; self.frames = frames }
     func start() async throws -> AsyncStream<PitchSample> {
         let note = notes[min(index, notes.count - 1)]
         index += 1
         return AsyncStream { continuation in
-            for frame in 0...140 {
-                let midi = note.map { $0 + (frame.isMultiple(of: 2) ? Float(0.1) : -0.1) }
+            for frame in 0..<(frames?.count ?? 141) {
+                let midi = frames.map { $0[frame] } ?? note.map { $0 + (frame.isMultiple(of: 2) ? Float(0.1) : -0.1) }
                 continuation.yield(PitchSample(captureTime: CMTime(seconds: Double(frame) * 0.05, preferredTimescale: 60000),
                     frequency: midi.map { Float(440 * pow(2, Double($0 - 69) / 12)) }, rmsDecibels: -20))
             }
             continuation.finish()
         }
     }
+    func stop() {}
+}
+
+nonisolated final class UnavailableMicrophone: LivePitchSource {
+    func start() async throws -> AsyncStream<PitchSample> { throw HeadsetMicrophoneError.unavailable }
     func stop() {}
 }
 
@@ -128,7 +135,7 @@ struct VocalKeyChecks {
             try check(calls[index * 2].0 == stems.mixURL && calls[index * 2 + 1].0 == stems.instrumentalURL, "render from original stems")
             try check(calls[index * 2].1 == shift && calls[index * 2 + 1].1 == shift && option.song.transposition.totalSemitones == shift, "audio and targets use exactly the same shift")
             try check(option.song.validate().isEmpty, "selected song satisfies handoff contract")
-            try check(option.recommendation.highestMIDI == 72 + shift, "score preserves high notes even when display simplification drops them")
+            try check(option.recommendation.highestMIDI == 72 + shift, "score and guide retain validated short high notes")
         }
         let preview = PreviewSpy()
         var chosen: PreparedSong?
@@ -156,15 +163,25 @@ struct VocalKeyChecks {
         try check(selection.error == .keyPreviewFailed, "preview failures are visible")
 
         let store = FakeVocalRangeRepository()
-        let rangeModel = VocalRangeViewModel(source: ScriptedPitchSource([57,48,48,67,67]), repository: store, configuration: .default, onSaved: {})
+        let rangeModel = VocalRangeViewModel(source: ScriptedPitchSource([57,48,67]), repository: store, configuration: .default, onSaved: {})
         await capture(rangeModel)
         try check(abs((rangeModel.baselineMIDI ?? 0) - 57) < 0.2, "speaking baseline uses median")
-        for _ in 0..<4 { rangeModel.next(); await capture(rangeModel) }
+        for _ in 0..<2 { rangeModel.next(); await capture(rangeModel) }
         rangeModel.save()
-        try check(abs((store.load()?.lowestMIDI ?? 0) - 48) < 0.2 && abs((store.load()?.highestMIDI ?? 0) - 67) < 0.2, "confirmed limits are persisted")
-        let mismatch = VocalRangeViewModel(source: ScriptedPitchSource([57,48,53]), repository: FakeVocalRangeRepository(), configuration: .default, onSaved: {})
-        await capture(mismatch); mismatch.next(); await capture(mismatch); mismatch.next(); await capture(mismatch)
-        try check(mismatch.status == .failed(.vocalRangeConfirmationFailed), "a different repeated note is rejected")
+        try check(abs((store.load()?.lowestMIDI ?? 0) - 48) < 0.2 && abs((store.load()?.highestMIDI ?? 0) - 67) < 0.2, "three-step range is persisted after stable holds")
+        try check(VocalRangeViewModel.Prompt.allCases.count == 3, "range flow contains exactly three steps")
+        let narrowRange = VocalRangeViewModel(source: ScriptedPitchSource([57,48,49]), repository: FakeVocalRangeRepository(), configuration: .default, onSaved: {})
+        await capture(narrowRange); narrowRange.next(); await capture(narrowRange); narrowRange.next(); await capture(narrowRange)
+        try check(narrowRange.status == .failed(.vocalRangeTooNarrow), "high note must still be above the low note")
+        let missingMic = VocalRangeViewModel(source: UnavailableMicrophone(), repository: FakeVocalRangeRepository(), configuration: .default, onSaved: {})
+        await capture(missingMic)
+        try check(missingMic.status == .failed(.headsetMicrophoneRequired), "missing headset produces an actionable error")
+        let unstableSource = ScriptedPitchSource(frames: (0...140).map { $0.isMultiple(of: 2) ? Float(48) : Float(52) })
+        let unstable = VocalRangeViewModel(source: unstableSource, repository: FakeVocalRangeRepository(), configuration: .default, onSaved: {})
+        await capture(unstable)
+        unstable.next()
+        await capture(unstable)
+        try check(unstable.status == .failed(.vocalRangeCaptureFailed), "display smoothing cannot make an unstable held note pass the range test")
         let silence = VocalRangeViewModel(source: ScriptedPitchSource([nil]), repository: FakeVocalRangeRepository(), configuration: .default, onSaved: {})
         await capture(silence)
         try check(silence.status == .failed(.vocalRangeCaptureFailed), "silence cannot establish a speaking baseline")

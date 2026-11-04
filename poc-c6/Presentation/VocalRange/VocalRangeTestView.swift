@@ -2,7 +2,7 @@
 //  VocalRangeTestView.swift
 //  poc-c6
 //
-//  Speaking baseline, comfortable limits and repeated sung confirmation.
+//  Speaking baseline and two comfortable limits, each confirmed by a stable hold.
 //
 
 import SwiftUI
@@ -39,6 +39,13 @@ struct VocalRangeTestView: View {
                 Text("Speaking note: \(name(baseline)) · starting point only")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+            if let microphone = viewModel.microphoneName {
+                Label("Microphone: \(microphone)", systemImage: "headphones")
+                    .font(.footnote)
+            } else {
+                Text("Connect a headset with a microphone before starting.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             Text(viewModel.instructions)
                 .font(.footnote)
@@ -143,6 +150,6 @@ struct VocalRangeTestView: View {
 
 #Preview {
     VocalRangeTestView(viewModel: VocalRangeViewModel(
-        source: FakeLivePitchSource(notes: [57, 48, 48, 67, 67]), repository: FakeVocalRangeRepository(),
+        source: FakeLivePitchSource(notes: [57, 48, 67]), repository: FakeVocalRangeRepository(),
         configuration: .default, onSaved: {}))
 }

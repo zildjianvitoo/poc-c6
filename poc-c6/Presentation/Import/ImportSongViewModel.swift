@@ -10,11 +10,6 @@
 import Foundation
 import Observation
 
-/// Data-layer errors that know how to explain themselves on screen.
-nonisolated protocol UserFacingConvertible: Error {
-    var userFacingError: UserFacingError { get }
-}
-
 @Observable
 final class ImportSongViewModel {
     enum Status: Equatable {

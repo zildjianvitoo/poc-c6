@@ -1,15 +1,15 @@
-# Vocal range and key comparison — 3 November 2026
+# Vocal range and key comparison — updated 4 November 2026
 
 Scope: C6 main app, vocal-range/import preparation (IK-03, IK-09, IK-10, IK-11).
 
 ## Behaviour
 
-- Five steps: normal speaking baseline, comfortable low hum, sung low confirmation,
-  comfortable high note, sung high confirmation. Speaking pitch is the median of voiced
+- Three prompts: normal speaking baseline, comfortable low hum, comfortable high note.
+  Speaking pitch is the median of voiced
   frames over a six-second sample, with at least two seconds of voiced frames. It is a
   starting reference only and never contributes to key scoring.
-- Both sung notes must be stable for two seconds using the existing detector. Repeated
-  notes must agree within one semitone; the conservative confirmed bounds are saved.
+- Both sung notes must be stable for one second using the existing detector. These
+  stable holds confirm consistency, with no extra repeated-note prompts.
 - Analyse/separate the selected clip once. Score the original sanitised vocal notes,
   before guide simplification can remove extremes or change their durations.
 - Reject every shift with any detected note outside the confirmed range. Use the supplied
@@ -39,11 +39,11 @@ existing callers; the main import and demo flows now use the new choice preparat
 
 - Existing domain checks: passed, including 5,000 segment layouts and 3,000 transposition
   comparisons. Existing contract checks: passed.
-- New `Tests/VocalKeyChecks.swift`: 41 checks passed. Covers candidate counts, strict
+- Updated `Tests/VocalKeyChecks.swift`: 44 checks passed. Covers candidate counts, strict
   rejection, deterministic ties, numeric quadratic/duration scores, narrow range handling,
   peak phrase selection, one analysis/separation per clip, matching audio/target shifts,
   validated prepared songs, explicit user selection, stale completion handling, visible
-  preview failures, baseline/confirmation/silence, and exact original stereo PCM copying.
+  preview failures, three-step flow, baseline/stable-hold/silence, and exact original stereo PCM copying.
 - All app Swift sources typechecked for arm64 iOS Simulator, Swift 5, default MainActor
   isolation and NonisolatedNonsendingByDefault: passed without warnings. The compiler was
   explicitly supplied Xcode's macOS-host Observation/SwiftUI/Preview macro libraries.
@@ -73,6 +73,10 @@ sources += [Path('poc-c6') / path for path in [
     'Shared/DSP/PitchMath.swift',
     'Presentation/Common/MediaPermissionProviding.swift',
     'Presentation/Common/UserFacingError.swift',
+    'Presentation/Common/UserFacingConvertible.swift',
+    'Presentation/Common/MicrophoneInputProviding.swift',
+    'Presentation/Common/HeadsetMicrophoneErrors.swift',
+    'Data/Audio/HeadsetMicrophoneError.swift',
     'Presentation/VocalRange/LivePitchSource.swift',
     'Presentation/VocalRange/VocalRangeViewModel.swift',
     'Presentation/Import/AudioPreviewing.swift',
@@ -91,7 +95,7 @@ PY
 
 ## Device acceptance still required
 
-1. Re-test an existing saved range; read naturally, hum low, and sing both limits twice.
+1. Re-test an existing saved range using a headset mic; read naturally, hum low, and sing high. Confirm there are exactly three prompts, and each sung limit requires a stable one-second hold.
 2. Import a stereo song with a known high phrase. Confirm each candidate plays its original
    accompaniment at that phrase, with matching tempo and different keys.
 3. Sing along with each choice, select a non-first choice, and confirm Ready/recording use it.
@@ -103,3 +107,45 @@ PY
 Phrase boundaries come from detected vocal pauses, not lyrics or musical verse markers.
 Pitch extraction/separation quality affects recommendations; the scoring is a heuristic,
 not a measured guarantee of singing comfort.
+
+## Realtime pitch and headset microphone fixes — 4 November 2026
+
+- The range UI now has exactly three prompts: speaking, lowest comfortable hum, highest
+  comfortable sung note. The one-second stable hold is the consistency check. Simulator
+  fixtures and regression checks follow the same three-prompt sequence.
+- Range note labels, the recording note readout and piano-roll trail use a display-only
+  stabiliser. It smooths small jitter and shows note changes immediately, without a
+  confirmation delay. Silence, rewinds and callback gaps reset it.
+  Raw samples still determine stable holds, key recommendations and recording scores.
+- Both range capture and video recording use HeadsetMicrophoneSession, with HFP enabled
+  for Bluetooth input. Wired headset inputs take priority over USB, then Bluetooth. Built-in
+  and output-only devices are rejected. The active input UID is verified before sampling,
+  and the actual microphone name is shown on screen.
+- The shared audio session is explicitly used by AVCaptureSession. Bluetooth HFP output
+  is recognised by the route monitor. Input loss/replacement ends range capture and stops
+  video recording; it does not silently continue with the phone's microphone. Route loss
+  is handled as an interruption, allowing the video to finalise and passed takes to remain
+  available for partial export. Audio buffers from a fallback microphone are not appended
+  after the input-change notification is processed.
+- Centralised microphone errors tell the user to connect a headset with a microphone.
+- Updated PRD §§4, 5.1, 6.5 and 7.2 supersede the previous built-in-microphone policy.
+
+Verification: 25 RealtimePitchChecks and 44 VocalKeyChecks passed, alongside the existing
+Domain and contract suites. All app Swift sources typechecked for arm64 iOS Simulator,
+Swift 5, default MainActor isolation, NonisolatedNonsendingByDefault and MemberImportVisibility,
+without warnings. The full Xcode build remains blocked by the environment's CoreML sandbox
+subprocess restriction and unavailable Simulator services. Hardware routing, actual sound
+quality, Bluetooth latency and unplug/reconnect behaviour still require a physical iPhone.
+
+To run the display and input-selection checks, compile all Domain Swift files plus
+`Tests/RealtimePitchChecks.swift` into a separate executable (it has its own `@main`),
+using the same SDK/module-cache settings as the feature-check command above.
+
+Device acceptance: connect a wired headset and then a Bluetooth headset in separate runs;
+confirm the displayed microphone matches the headset in both the range test and recording.
+Try singing a held note and then a deliberate interval jump, disconnect the microphone
+mid-recording, and confirm recording stops while previously passed segments can be exported.
+With no compatible microphone, check that the app explains what must be connected.
+
+The follow-up investigation and corrected guide/PCM continuity behaviour are documented
+in `realtime-regression-2026-11-04.md`. Re-prepare songs to regenerate existing guide blocks.
