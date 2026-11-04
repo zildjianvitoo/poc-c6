@@ -31,7 +31,9 @@ nonisolated struct PoCConfiguration: Sendable, Equatable, Codable {
     var evaluationTail: TimeInterval = 0.15
 
     // Comping
-    var crossfade: TimeInterval = 0.03
+    /// Take handle and transition length at each cut: the vocals crossfade (equal power) and the
+    /// video dissolves over this time, centred on the boundary. 30 ms → 150 ms on 2026-11-04 (smoother cuts).
+    var crossfade: TimeInterval = 0.15
     var partialExportFadeOut: TimeInterval = 1.0
     var vocalGain: Float = 1.0
     var instrumentalGain: Float = 0.8

@@ -55,7 +55,7 @@ struct DebugSettingsView: View {
                     row("Max session", $configuration.maxSessionDuration, in: 60...1800, step: 60, unit: " s")
                 }
                 Section("Comping") {
-                    row("Crossfade", $configuration.crossfade, in: 0.01...0.1, step: 0.01, unit: " s")
+                    row("Crossfade", $configuration.crossfade, in: 0.01...0.3, step: 0.01, unit: " s")
                     row("Partial fade-out", $configuration.partialExportFadeOut, in: 0...3, step: 0.5, unit: " s")
                     row("Vocal gain", $configuration.vocalGain, in: 0...2, step: 0.1)
                     row("Instrumental gain", $configuration.instrumentalGain, in: 0...2, step: 0.1)

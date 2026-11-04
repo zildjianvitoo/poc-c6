@@ -12,7 +12,8 @@ nonisolated struct ConfigurationStore: @unchecked Sendable {
     static let versionKey = "PoCConfiguration.version"
     /// Bump when a default changes in a way saved settings must pick up.
     /// 2 (2026-11-01): hit tolerance 50 → 80 cents, CoreML separation on.
-    static let currentVersion = 2
+    /// 3 (2026-11-04): crossfade 30 → 150 ms (video dissolve + equal-power vocal crossfade).
+    static let currentVersion = 3
 
     let defaults: UserDefaults
 
@@ -26,18 +27,25 @@ nonisolated struct ConfigurationStore: @unchecked Sendable {
               var configuration = try? JSONDecoder().decode(PoCConfiguration.self, from: data) else {
             return .default
         }
-        if defaults.integer(forKey: Self.versionKey) < Self.currentVersion {
-            configuration = Self.migrate(configuration)
+        let version = defaults.integer(forKey: Self.versionKey)
+        if version < Self.currentVersion {
+            configuration = Self.migrate(configuration, from: version)
             save(configuration)
         }
         return configuration
     }
 
-    /// Settings saved before version 2 kept the old tolerance and had Track B off.
-    static func migrate(_ old: PoCConfiguration) -> PoCConfiguration {
+    /// Old saved settings kept old defaults: the 50-cent tolerance and Track B off (before 2),
+    /// the 30 ms crossfade (before 3). Values the user changed themselves are kept.
+    static func migrate(_ old: PoCConfiguration, from version: Int) -> PoCConfiguration {
         var configuration = old
-        if configuration.hitToleranceCents == 50 { configuration.hitToleranceCents = PoCConfiguration.default.hitToleranceCents }
-        configuration.useCoreMLSeparation = PoCConfiguration.default.useCoreMLSeparation
+        if version < 2 {
+            if configuration.hitToleranceCents == 50 { configuration.hitToleranceCents = PoCConfiguration.default.hitToleranceCents }
+            configuration.useCoreMLSeparation = PoCConfiguration.default.useCoreMLSeparation
+        }
+        if version < 3, abs(configuration.crossfade - 0.03) < 1e-9 {
+            configuration.crossfade = PoCConfiguration.default.crossfade
+        }
         return configuration
     }
 
