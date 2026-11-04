@@ -1,6 +1,6 @@
 # SRS & PRD: iOS Song Cover Recording & Auto-Comping PoC
 
-> **Version 3.2** — 3 Nov 2026: synced lyrics on the trim screen from LRCLIB (§5.2). **Version 3.1** — 3 Nov 2026: on-device separation of imported songs is **htdemucs** (CoreML), replacing the Open-Unmix model from the first Track B spike (§3). **Version 3** — 31 Oct 2026. v2 incorporated the decisions from `docs/review-prd.md`; v3 adds the team ownership split (§12) and switches guide extraction to Basic Pitch on the vocal stem (from `docs/review-tech-flow.md`). Lives at `docs/prd.md` (outside the app target so it is not bundled). Previous version archived at `docs/archive/prd-v1.md`. Accuracy roadmap: `docs/roadmap-akurasi.md`.
+> **Version 3.3** — 4 Nov 2026: chorus suggestion on the trim screen (§5.2), 150 ms video dissolve + equal-power vocal crossfade at cuts (§5.9), CoreML models prewarmed at app start (§6.5). **Version 3.2** — 3 Nov 2026: synced lyrics on the trim screen from LRCLIB (§5.2). **Version 3.1** — 3 Nov 2026: on-device separation of imported songs is **htdemucs** (CoreML), replacing the Open-Unmix model from the first Track B spike (§3). **Version 3** — 31 Oct 2026. v2 incorporated the decisions from `docs/review-prd.md`; v3 adds the team ownership split (§12) and switches guide extraction to Basic Pitch on the vocal stem (from `docs/review-tech-flow.md`). Lives at `docs/prd.md` (outside the app target so it is not bundled). Previous version archived at `docs/archive/prd-v1.md`. Accuracy roadmap: `docs/roadmap-akurasi.md`.
 
 ## 1. Project Overview & Core Value Proposition
 Build an iOS 18+ Proof of Concept (PoC) application in Swift & SwiftUI for independent Gen Z song cover creators.
@@ -9,7 +9,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 2. **Reference Separation, Audio-to-MIDI & Auto-Segmentation:** Importing a full reference song (full mix with the original vocals, trimmed to 15–60 s), separating it into a vocal stem and an instrumental stem (see §3 for the two-track strategy), extracting the vocal melody into target MIDI notes, and slicing the song into phrase segments based on breathing pauses/silences.
 3. **Continuous Camera Recording + Synced Reference Playback + Live Piano Roll:** Recording a single, uninterrupted 9:16 vertical video (`RawMasterVideo.mov`) while playing the reference audio through earphones and rendering a semi-transparent real-time Piano Roll overlay in the center of the screen.
 4. **Segment Evaluation & Seamless Auto-Rewind Loop:** Evaluating pitch accuracy at the end of each phrase segment. If the score is `< 75%` (**TRY AGAIN**), highlight missed notes, show a `3.. 2.. 1..` countdown, and rewind the Piano Roll playhead + reference audio to the start of the current segment WITHOUT pausing the camera recording. If `>= 75%` (**PASSED**), log the valid video `CMTimeRange` and continue straight into the next segment.
-5. **Automated Comping & Mixdown (Auto-Cut, Stitch & Mix):** When all segments pass — or the user ends the session early — slice `RawMasterVideo.mov` using the logged `CMTimeRange`s, place each passed take at its exact position on the song timeline, crossfade vocal takes (30 ms), mix the user's vocal with the **instrumental (no original vocals)**, and export a single `FinalCoverVideo.mp4` ready for social media upload.
+5. **Automated Comping & Mixdown (Auto-Cut, Stitch & Mix):** When all segments pass — or the user ends the session early — slice `RawMasterVideo.mov` using the logged `CMTimeRange`s, place each passed take at its exact position on the song timeline, dissolve the video and crossfade the vocal takes (150 ms) at each cut, mix the user's vocal with the **instrumental (no original vocals)**, and export a single `FinalCoverVideo.mp4` ready for social media upload.
 
 ---
 
@@ -25,7 +25,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 ### 2.2 Out of Scope (PoC)
 * Lyrics on the recording screen, editing lyrics, manual editing of guide notes, MIDI import.
 * Choosing between multiple passed takes of the same segment, voluntarily re-recording a passed segment.
-* Vocal effects (reverb, EQ, auto-tune), video transitions/filters (video cuts are hard cuts).
+* Vocal effects (reverb, EQ, auto-tune), video transitions other than the short dissolve at cuts (§5.9), filters.
 * Landscape, iPad, accounts/backend, direct upload to social platforms, cloud processing. *(Exception: the lyrics lookup in §5.2 sends only the title, artist and duration to LRCLIB; audio never leaves the device.)*
 
 ### 2.3 Platform
@@ -80,6 +80,7 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
   * Lines inside the chosen part are lit, the rest dimmed, and the list scrolls to the selection start.
   * **Play Selection** previews the chosen part: the current line is bold and its words fill in karaoke-style. LRC times whole lines only, so word times are estimated from syllable counts (capped so words don't stretch into instrumental breaks).
   * Credit line under the lyrics: matched title/artist, "from LRCLIB", timing may be slightly off.
+  * **Chorus suggestion (v3.3):** the most repeated block of 2+ lyric lines (case, punctuation, accents and vocal fillers ignored) is the chorus. When lyrics arrive and the user hasn't moved a slider, the selection jumps to its first occurrence (1 s lead-in and tail, clamped to 15–60 s) with a "Suggested" label; after manual changes a "Back to Chorus" button restores it. No lyrics → no suggestion (an audio-based fallback is not built).
   * No ASR model: the on-device Whisper spike (`docs/test-reports/lyrics-whisper-spike-2026-11-03.md`) needed a 550 MB model to reach 27 % WER on Indonesian.
 * Disclaimer (processing screen + small badge on the recording screen):
   > **Experimental (Phase 1):** The pitch guide is extracted from the original song and may be inaccurate, especially in busy sections.
@@ -144,8 +145,10 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 
 ### 5.9 Comping, Mixdown & Export
 * Composition timeline = song timeline (trimmed reference, starting at 0).
-* For each passed segment `i`: insert its take's video at composition time `segment.audioStartTime` with duration `segment.audioDuration` (video: hard cut).
-* Vocal audio: takes alternate between two composition audio tracks (A/B) with 30 ms handles on each side and complementary `setVolumeRamp`s → true 30 ms crossfade. (A single track only produces a dip, not a crossfade.)
+* For each passed segment `i`: insert its take plus the `crossfade` handles (150 ms, none before the first take or after the last) at composition time `segment.audioStartTime − handle`.
+* **Video (v3.3):** takes alternate between two composition video tracks (A/B); an `AVMutableVideoComposition` shows one take at a time and **dissolves** (outgoing take's opacity 1 → 0 over the incoming one) during `crossfade`, centred on each boundary. Layer transforms keep the portrait orientation and mirroring; the composition keeps the recording's colour tags (BT.709/HLG).
+* **Vocal audio:** takes alternate between two composition audio tracks (A/B) with complementary **equal-power** ramps (sine in / cosine out, as 8 linear `setVolumeRamp` pieces) over the same `crossfade` window → no level dip at the cut. (A single track only produces a dip, not a crossfade.)
+* Boundaries sit in the breathing pauses between phrases (§5.3), so the 150 ms transition rarely overlaps singing.
 * Instrumental: transposed instrumental on its own track from 0 to the export end time.
 * Default gains: vocal 1.0, instrumental 0.8 (tunable, §8).
 * **Front camera mirrored** in the final video (matches the preview, like a selfie).
@@ -246,7 +249,7 @@ public struct TakeAttemptLog: Identifiable, Sendable {
     public let id: UUID
     public let segmentIndex: Int
     public let attemptNumber: Int
-    public let videoTimeRange: CMTimeRange // In RawMasterVideo.mov file time, incl. 30 ms handles
+    public let videoTimeRange: CMTimeRange // In RawMasterVideo.mov file time, incl. `crossfade` handles (150 ms)
     public let accuracyScore: Float        // 0.0 ... 1.0
     public let missedNoteIDs: [UUID]
     public let status: SegmentAttemptStatus
@@ -258,7 +261,7 @@ public struct CompingCompositionPlan: Sendable {
     public let segments: [SongSegment]      // For timeline placement
     public let validTakes: [TakeAttemptLog] // 1 passed take per segment, prefix 1...N
     public let endTime: TimeInterval        // End of last passed segment
-    public let crossfadeDuration: CMTime    // 30 ms
+    public let crossfadeDuration: CMTime    // 150 ms (video dissolve + vocal crossfade)
     public let instrumentalFadeOut: TimeInterval // 1.0 s for partial export, 0 for full
     public let vocalGain: Float
     public let instrumentalGain: Float
@@ -339,6 +342,7 @@ public protocol VideoCompositionRepository: Sendable {
 1. **Stem separation:** `BundledStemsRepository` (Track A demo), `SynthesizedDemoRepository` (developer fallback), `CenterChannelStemRepository` (L−R / mid fallback), `HTDemucsStemSeparationRepository` (htdemucs CoreML + `DemucsSpectrogram`, behind `useCoreMLSeparation`); `SelectingStemSeparationRepository` picks htdemucs and falls back to center-channel.
 2. **Guide extraction:** `BasicPitchAnalysisRepository` (CoreML + monophonic reduction) and `CrepeAnalysisRepository` (`AVAssetReader` → PCM float → `CrepePitchDetector`), both conforming to `AudioAnalysisRepository` (§5.3). Fallback chosen in `PrepareSongUseCase`.
 3. **`AudioTranspositionRepositoryImpl`** — `AVAudioEngine` offline manual rendering + `AVAudioUnitTimePitch`.
+   * **Model prewarm (v3.3):** `ModelPrewarmer` loads CREPE and htdemucs (plus one silent htdemucs window to set up the GPU) on a utility task at app start, so the vocal range test, Preparation and recording don't wait for model loading.
    * **Lyrics (trim screen):** `LRCLibLyricsProvider` (URLSession, LRCLIB search + duration match), `LRCLyricsParser` (LRC → lines + estimated word times), `SongTitleGuess` (title/artist from file names); protocol `LyricsProviding` lives with the import screen (`Presentation/Import`), like `AudioFileInspecting`.
 4. **`CaptureRepositoryImpl`**
    * `AVCaptureSession` with `automaticallyConfiguresApplicationAudioSession = false`, front `builtInWideAngleCamera` (1080×1920 @ 30 fps, video connection mirrored), built-in mic.
@@ -359,7 +363,7 @@ public protocol VideoCompositionRepository: Sendable {
 * **File time** = `captureTime − firstVideoPTS` (exact, because the writer session starts at `firstVideoPTS`).
 * **Playback anchor:** `ReferencePlaybackRepository.play(from:)` schedules at host time `H`, converts with `CMSyncConvertTime(H, from: CMClockGetHostTimeClock(), to: synchronizationClock)`, and adds `latencyOffset`.
 * `latencyOffset = AVAudioSession.outputLatency + ioBufferDuration + manualLatencyCalibration` (calibration default 0, editable in Debug Settings; mostly needed for Bluetooth).
-* Capture time of reference time `r` = `anchor + (r − playFromReferenceTime)`. A take's `videoTimeRange` = file times of `[segment.start − 30 ms, segment.end + 30 ms]`.
+* Capture time of reference time `r` = `anchor + (r − playFromReferenceTime)`. A take's `videoTimeRange` = file times of `[segment.start − crossfade, segment.end + crossfade]` (150 ms).
 
 ### 7.2 Audio Session
 * Category `.playAndRecord`, mode `.videoRecording`, options `[.allowBluetoothA2DP]` only (**no** `.defaultToSpeaker`, **no** `.allowBluetooth`/HFP).
@@ -392,7 +396,7 @@ public protocol VideoCompositionRepository: Sendable {
 | `segmentGap` / `minSegment` / `maxSegment` | 0.8 s / 3.0 s / 8.0 s |
 | `preRoll` | 2.0 s |
 | `countdown` | 3 s |
-| `crossfade` | 0.03 s |
+| `crossfade` | 0.15 s *(was 0.03 s; v3.3, saved settings migrated)* |
 | `vocalGain` / `instrumentalGain` | 1.0 / 0.8 |
 | `manualLatencyCalibration` | 0 ms |
 | `maxSessionDuration` | 15 min |
@@ -487,7 +491,7 @@ Detailed per-person backlogs: `docs/backlog/ikzaz.md`, `docs/backlog/takin.md`, 
 |---|---|---|
 | Ikzaz → Takin | `PreparedSong` | `segments` tile the timeline with no holes (§5.3); `earphoneMixURL` already transposed by `semitoneShift`; target notes in original key + `transposition` provided |
 | Ikzaz → Zildjian | `PreparedSong.instrumentalURL` | No original vocals; transposed by the **same** `semitoneShift` as the earphone mix; same start (t = 0) and duration as the trimmed song |
-| Takin → Zildjian | Raw video URL + `passedTakesPrefix()` (`[TakeAttemptLog]`) | `videoTimeRange` in **file time** of `RawMasterVideo.mov`, aligned to what the user heard (latency compensated), incl. 30 ms handles; exactly one passed take per segment, prefix `1…N`; front camera already mirrored |
+| Takin → Zildjian | Raw video URL + `passedTakesPrefix()` (`[TakeAttemptLog]`) | `videoTimeRange` in **file time** of `RawMasterVideo.mov`, aligned to what the user heard (latency compensated), incl. `crossfade` (150 ms) handles; exactly one passed take per segment, prefix `1…N`; front camera already mirrored |
 | Zildjian → all | `AppContainer` + synthesized demo | Fake/synthesized implementations of every protocol so each owner can run their part without the others being done |
 
 ### 12.3 Integration milestones
