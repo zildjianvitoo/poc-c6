@@ -7,6 +7,7 @@ import Foundation
 
 /// Serial-worker storage. Discontinuities are never joined into an artificial waveform.
 nonisolated struct PitchFrameBuffer {
+    var configuration = PoCConfiguration.default
     private var samples: [Float] = []
     private var origin = 0.0
     private var rate = 0.0
@@ -16,13 +17,16 @@ nonisolated struct PitchFrameBuffer {
 
     mutating func append(_ input: [Float], sampleRate: Double, start: Double) -> [(samples: [Float], start: Double)] {
         guard sampleRate.isFinite, sampleRate > 0, start.isFinite, !input.isEmpty else { return [] }
-        if rate != sampleRate || expectedStart.map({ abs($0 - start) > 2 / sampleRate }) ?? true {
+        let timestampTolerance = max(2 / sampleRate, configuration.pitchTimestampJitterTolerance)
+        if rate != sampleRate || expectedStart.map({ abs($0 - start) > timestampTolerance }) ?? true {
             samples.removeAll(keepingCapacity: true)
             origin = start
         }
         rate = sampleRate
-        expectedStart = start + Double(input.count) / rate
         samples.append(contentsOf: input)
+        // Anchor to accumulated sample counts, not each jittered timestamp. This prevents
+        // a sequence of small timestamp errors from accumulating into clock drift.
+        expectedStart = origin + Double(samples.count) / rate
         let window = Int((rate * Self.windowDuration).rounded(.up))
         let hop = max(1, Int((rate * PoCConfiguration.default.pitchHop).rounded()))
         var frames: [(samples: [Float], start: Double)] = []

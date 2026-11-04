@@ -4,16 +4,11 @@
 //
 //  Import → trim → prepare (PRD §5.2–5.4): the user picks a song they own, chooses 15–60 s
 //  while seeing (and hearing) the synced lyrics of that part, and PrepareSongUseCase separates
-//  it, extracts the guide, slices segments and transposes it to the saved vocal range.
+//  it, extracts the guide, slices segments and renders the recommended keys to choose from.
 //
 
 import Foundation
 import Observation
-
-/// Data-layer errors that know how to explain themselves on screen.
-nonisolated protocol UserFacingConvertible: Error {
-    var userFacingError: UserFacingError { get }
-}
 
 @Observable
 final class ImportSongViewModel {
@@ -63,15 +58,16 @@ final class ImportSongViewModel {
     @ObservationIgnored private let previewer: any AudioPreviewing
     @ObservationIgnored private let prepare: PrepareSongUseCase
     @ObservationIgnored private let vocalRange: () -> VocalRange?
-    /// The prepared song and its stems before transposition.
-    @ObservationIgnored private let onPrepared: (PreparedSong, SeparatedStems) -> Void
+    /// Called with the key choices; each holds a prepared song, and `stems` the untransposed stems.
+    @ObservationIgnored private let onPrepared: (PrepareSongUseCase.Choices) -> Void
     @ObservationIgnored private var preparation: Task<Void, Never>?
+    @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var lyricsLookup: Task<Void, Never>?
     @ObservationIgnored private var playback: Task<Void, Never>?
 
     init(inspector: any AudioFileInspecting, lyrics: any LyricsProviding, previewer: any AudioPreviewing,
          prepare: PrepareSongUseCase,
-         vocalRange: @escaping () -> VocalRange?, onPrepared: @escaping (PreparedSong, SeparatedStems) -> Void) {
+         vocalRange: @escaping () -> VocalRange?, onPrepared: @escaping (PrepareSongUseCase.Choices) -> Void) {
         self.inspector = inspector
         self.lyricsProvider = lyrics
         self.previewer = previewer
@@ -121,18 +117,22 @@ final class ImportSongViewModel {
         stopSelectionPreview()
         let trim = selectionStart...(selectionStart + selectionLength)
         status = .preparing(step: "Starting…")
+        let token = generation
         preparation = Task { [prepare] in
             do {
-                let (song, stems) = try await prepare.executeReturningStems(audioURL: audio.url, trimRange: trim, vocalRange: range) { step in
+                let choices = try await prepare.executeChoices(audioURL: audio.url, trimRange: trim, vocalRange: range) { step in
                     Task { @MainActor in
-                        if case .preparing = self.status { self.status = .preparing(step: step) }
+                        if self.generation == token, case .preparing = self.status { self.status = .preparing(step: step) }
                     }
                 }
                 try Task.checkCancellation()
-                onPrepared(song, stems)
+                guard generation == token else { return }
+                onPrepared(choices)
             } catch is CancellationError {
+                guard generation == token else { return }
                 status = .trimming(audio)
             } catch {
+                guard generation == token else { return }
                 status = .failed(Self.userFacing(error))
             }
         }
@@ -145,6 +145,7 @@ final class ImportSongViewModel {
 
     func reset() {
         cancelPreparation()
+        generation = UUID()
         stopSelectionPreview()
         lyricsLookup?.cancel()
         lyrics = .idle
@@ -275,7 +276,7 @@ final class ImportSongViewModel {
             return .noVocalDetected
         case let violation as ContractViolation where violation.message.contains("guide notes"):
             return .noVocalDetected
-        default: return .unreadableFile
+        default: return .keyPreparationFailed
         }
     }
 }

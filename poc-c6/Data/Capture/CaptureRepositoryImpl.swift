@@ -2,7 +2,7 @@
 //  CaptureRepositoryImpl.swift
 //  poc-c6
 //
-//  Front camera + built-in mic → RawMasterVideo.mov, and live CREPE pitch from the same
+//  Front camera + headset microphone → RawMasterVideo.mov, and live CREPE pitch from the same
 //  audio buffers (PRD §6.5.4, §7.1, §7.2). Permissions are requested by PermissionGate.
 //
 
@@ -14,7 +14,7 @@ extension Notification.Name {
 }
 
 /// Capture and writer state belongs exclusively to queue; clock snapshots and subscribers use lock.
-nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, MicrophoneSampleSource, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, CameraPreviewSource, MicrophoneSampleSource, MicrophoneInputProviding, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
     // Recording format fixed by PRD §6.5.4 (portrait 1080×1920, see makeVideoInput).
     private static let framesPerSecond: Int32 = 30
     static let portraitRotation: CGFloat = 90
@@ -44,6 +44,30 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
     }
     private var destination: URL?
     private var prepared = false
+    private var microphoneObserver: NSObjectProtocol?
+    private var selectedMicrophoneUID: String?
+    private var microphoneChanged = false
+
+    var microphoneName: String? { HeadsetMicrophoneSession.currentInput?.portName }
+    var isHeadsetMicrophoneActive: Bool { HeadsetMicrophoneSession.currentInput != nil }
+
+    override init() {
+        super.init()
+        microphoneObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            guard let self else { return }
+            self.queue.async {
+                guard self.recording, let selected = self.selectedMicrophoneUID else { return }
+                if HeadsetMicrophoneSession.currentInput?.uid != selected, !self.microphoneChanged {
+                    self.microphoneChanged = true
+                    NotificationCenter.default.post(name: .headsetMicrophoneChanged, object: self)
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let microphoneObserver { NotificationCenter.default.removeObserver(microphoneObserver) }
+    }
 
     var previewSession: AVCaptureSession { session }
     var previewDevice: AVCaptureDevice? {
@@ -51,7 +75,7 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
     }
 
     func prepare() async throws {
-        try Self.activateAudioSession()
+        let microphoneUID = try HeadsetMicrophoneSession.activate(mode: .videoRecording, sampleRate: Self.audioSampleRate)
         try await worker.prepare()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
@@ -61,6 +85,8 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                         self.prepared = true
                     }
                     if !self.session.isRunning { self.session.startRunning() }
+                    try HeadsetMicrophoneSession.verify(microphoneUID)
+                    self.selectedMicrophoneUID = microphoneUID
                     // After commitConfiguration and startRunning: inside the configuration block the
                     // connection may not report rotation as supported yet, and the request is lost.
                     self.orientVideoConnection()
@@ -68,7 +94,11 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                     self.clock = self.session.synchronizationClock ?? CMClockGetHostTimeClock()
                     self.lock.unlock()
                     continuation.resume()
-                } catch { continuation.resume(throwing: error) }
+                } catch {
+                    self.session.stopRunning()
+                    Self.deactivateAudioSession()
+                    continuation.resume(throwing: error)
+                }
             }
         }
     }
@@ -78,6 +108,7 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
         defer { session.commitConfiguration() }
         for input in session.inputs { session.removeInput(input) }
         for output in session.outputs { session.removeOutput(output) }
+        session.usesApplicationAudioSession = true
         session.automaticallyConfiguresApplicationAudioSession = false
         session.sessionPreset = .hd1920x1080
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
@@ -125,21 +156,6 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
         }
     }
 
-    /// PRD §7.2: play-and-record for video, A2DP only (no HFP, no speaker default), built-in mic always.
-    /// The debug speaker test adds `.defaultToSpeaker`; otherwise audio without earphones would go
-    /// to the quiet receiver.
-    private static func activateAudioSession() throws {
-        let audioSession = AVAudioSession.sharedInstance()
-        var options: AVAudioSession.CategoryOptions = [.allowBluetoothA2DP]
-        if DebugOptions.allowsSpeakerRecording { options.insert(.defaultToSpeaker) }
-        try audioSession.setCategory(.playAndRecord, mode: .videoRecording, options: options)
-        try audioSession.setPreferredSampleRate(audioSampleRate)
-        try audioSession.setActive(true)
-        if let mic = audioSession.availableInputs?.first(where: { $0.portType == .builtInMic }) {
-            try audioSession.setPreferredInput(mic)
-        }
-    }
-
     private static func deactivateAudioSession() {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -149,6 +165,8 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
             queue.async {
                 do {
                     guard self.prepared, self.session.isRunning, !self.session.isInterrupted, !self.recording else { throw self.error("Capture is not ready.") }
+                    guard let microphoneUID = self.selectedMicrophoneUID else { throw HeadsetMicrophoneError.unavailable }
+                    try HeadsetMicrophoneSession.verify(microphoneUID)
                     try SessionFiles.prepareDirectory()
                     let url = SessionFiles.rawVideoURL
                     try? FileManager.default.removeItem(at: url)
@@ -163,6 +181,7 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
                     self.audioInput = audio
                     self.destination = url
                     self.failure = nil
+                    self.microphoneChanged = false
                     self.lock.lock()
                     self.firstPTS = nil
                     self.lock.unlock()
@@ -218,6 +237,9 @@ nonisolated final class CaptureRepositoryImpl: NSObject, CaptureRepository, Came
         guard writer.status == .writing else { failure = writer.error ?? error("Recording was interrupted."); return }
         lock.lock(); let first = firstPTS; lock.unlock()
         guard let first, pts >= first else { return }
+        // Preserve video finalisation and passed takes, but never append audio from a
+        // fallback microphone while the controller responds to a route change.
+        if !isVideo && microphoneChanged { return }
         let input = isVideo ? videoInput : audioInput
         if input?.isReadyForMoreMediaData == true, input?.append(sampleBuffer) != true {
             failure = writer.error ?? error("Cannot write captured media.")

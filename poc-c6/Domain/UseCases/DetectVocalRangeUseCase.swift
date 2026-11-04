@@ -2,7 +2,7 @@
 //  DetectVocalRangeUseCase.swift
 //  poc-c6
 //
-//  One prompt of the vocal range test (PRD §5.1): listens until ~2 s of stable pitch
+//  One prompt of the vocal range test (PRD §5.1): listens until ~1 s of stable pitch
 //  (every frame within ±50 cents of the run's median) and returns the median MIDI note.
 //  Feed it the live PitchSamples; create a new one per prompt or retry.
 //
@@ -12,7 +12,7 @@ import Foundation
 
 nonisolated struct DetectVocalRangeUseCase: Sendable {
     /// PRD §5.1: how long the note must be held.
-    static let requiredDuration: TimeInterval = 2
+    static let requiredDuration: TimeInterval = 1
     /// PRD §5.1: allowed variation around the median, in semitones (±50 cents).
     static let stabilityTolerance: Float = 0.5
     /// Unvoiced gaps shorter than this (a breath, a dropped frame) do not break the run.
@@ -42,6 +42,13 @@ nonisolated struct DetectVocalRangeUseCase: Sendable {
     mutating func ingest(_ sample: PitchSample) -> Float? {
         guard result == nil else { return result }
         let time = sample.captureTime.seconds
+        guard time.isFinite else { reset(); latestMIDI = nil; return nil }
+        // Callback gaps must break a hold even when no unvoiced frame was delivered.
+        if let lastVoicedTime, time - lastVoicedTime > Self.maxGap || time < lastVoicedTime {
+            reset()
+        }
+        // Repeated timestamps cannot contribute elapsed hold time.
+        if time == lastVoicedTime { return nil }
         guard let frequency = sample.frequency, frequency.isFinite, frequency > 0,
               sample.rmsDecibels >= configuration.noiseGateDBFS else {
             if let lastVoicedTime, time - lastVoicedTime > Self.maxGap { reset() }

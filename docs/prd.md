@@ -53,11 +53,11 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 ---
 
 ## 4. End-to-End User & System Workflow
-0. **Step 0 (Vocal Range Test — once, re-testable from Settings):** User sings their lowest comfortable note, then their highest, each held ~2 s. The stable pitch is stored as `VocalRange`.
+0. **Step 0 (Vocal Range Test — once, re-testable from Settings):** User reads a speaking baseline, then hums their lowest comfortable note and sings their highest, each held ~1 s. These are exactly three test prompts; no repeated-note screens. The stable pitch is stored as `VocalRange`.
 1. **Step 1 (Import & Trim):** User picks a reference song (full mix) from Files/Photos or loads the bundled demo, then trims it to 15–60 s. The Phase 1 disclaimer (§5.2) is shown.
 2. **Step 2 (Offline Preparation):** Stem separation → guide extraction from the vocal stem → segmentation → transposition plan → offline render of transposed earphone mix and transposed instrumental. Progress shown step by step.
 3. **Step 3 (Ready Screen):** Shows segment count, chosen transposition (e.g. "−3 semitones"), and an earphone check. Record is disabled when audio output is the built-in speaker/receiver.
-4. **Step 4 (Uninterrupted Session):** User taps Record. Front camera (9:16) + built-in mic record continuously into `RawMasterVideo.mov`. Pre-roll then Segment 1 plays in the earphones; the piano roll scrolls and the user's live pitch trail is drawn (green = within ±50 cents, red = off).
+4. **Step 4 (Uninterrupted Session):** User taps Record. Front camera (9:16) + headset microphone record continuously into `RawMasterVideo.mov`. Pre-roll then Segment 1 plays in the earphones; the piano roll scrolls and the user's live pitch trail is drawn (green = within ±50 cents, red = off).
 5. **Step 5 (Evaluation Loop):** At the end of Segment N (+ latency tail):
    * **TRY AGAIN (< 75%):** playback stops, missed notes flash red, `3.. 2.. 1..` countdown, pre-roll, Segment N again. Camera keeps rolling.
    * **PASSED (≥ 75%):** green badge flashes; playback has already continued seamlessly into Segment N+1 (no stop, no countdown).
@@ -69,8 +69,8 @@ The app eliminates repetitive trial-and-error recording (retaking the entire son
 ## 5. Functional Requirements
 
 ### 5.1 Vocal Range Test
-* Two prompts: "Sing your lowest comfortable note" and "Sing your highest comfortable note". Each records until ~2 s of stable pitch (pitch varies < ±50 cents) is captured; value = median MIDI of stable frames.
-* Live pitch readout with note name during the test. Retry per prompt.
+* Three prompts: read aloud naturally (speaking baseline), "Hum your lowest comfortable note", and "Sing your highest comfortable note". Each sung limit records until ~1 s of stable pitch (pitch varies < ±50 cents) is captured; value = median MIDI of stable frames. The stable hold confirms consistency, without extra confirmation prompts. Speaking baseline is a starting reference only and is excluded from key scoring.
+* Live pitch readout with note name during the test. Retry per prompt. Smooth only the display to suppress brief pitch spikes; range detection and recording scores use the raw samples. Show the actual microphone name during range capture and recording.
 * Persisted locally (`UserDefaults`); "Re-test Vocal Range" in Settings.
 
 ### 5.2 Import, Trim & Disclaimer
@@ -345,7 +345,7 @@ public protocol VideoCompositionRepository: Sendable {
    * **Model prewarm (v3.3):** `ModelPrewarmer` loads CREPE and htdemucs (plus one silent htdemucs window to set up the GPU) on a utility task at app start, so the vocal range test, Preparation and recording don't wait for model loading.
    * **Lyrics (trim screen):** `LRCLibLyricsProvider` (URLSession, LRCLIB search + duration match), `LRCLyricsParser` (LRC → lines + estimated word times), `SongTitleGuess` (title/artist from file names); protocol `LyricsProviding` lives with the import screen (`Presentation/Import`), like `AudioFileInspecting`.
 4. **`CaptureRepositoryImpl`**
-   * `AVCaptureSession` with `automaticallyConfiguresApplicationAudioSession = false`, front `builtInWideAngleCamera` (1080×1920 @ 30 fps, video connection mirrored), built-in mic.
+   * `AVCaptureSession` with `automaticallyConfiguresApplicationAudioSession = false`, front `builtInWideAngleCamera` (1080×1920 @ 30 fps, video connection mirrored), headset microphone selected through the shared audio session.
    * `AVCaptureVideoDataOutput` + `AVCaptureAudioDataOutput` → `AVAssetWriter` (`RawMasterVideo.mov`, HEVC + AAC), `startSession(atSourceTime: firstVideoPTS)`; audio samples before `firstVideoPTS` dropped.
    * The same audio sample buffers feed `CrepePitchDetector` (1024-sample window at 16 kHz, 50 ms hop) → `PitchSample`. No second mic consumer.
 5. **`ReferencePlaybackRepositoryImpl`** — `AVAudioEngine` + `AVAudioPlayerNode`, `scheduleSegment` started with `play(at: AVAudioTime(hostTime:))` a few ms in the future; converts host time to the capture clock (§7.1).
@@ -366,9 +366,9 @@ public protocol VideoCompositionRepository: Sendable {
 * Capture time of reference time `r` = `anchor + (r − playFromReferenceTime)`. A take's `videoTimeRange` = file times of `[segment.start − crossfade, segment.end + crossfade]` (150 ms).
 
 ### 7.2 Audio Session
-* Category `.playAndRecord`, mode `.videoRecording`, options `[.allowBluetoothA2DP]` only (**no** `.defaultToSpeaker`, **no** `.allowBluetooth`/HFP).
-* `setPreferredInput` → built-in mic, always (even with Bluetooth output).
-* Record is blocked when the output route is the built-in speaker or receiver.
+* Category `.playAndRecord`, mode `.videoRecording`, options `[.allowBluetoothA2DP, .allowBluetoothHFP]`. Bluetooth microphone input requires HFP; output uses the corresponding headset route.
+* `setPreferredInput` selects an available external microphone, preferring wired headset, then USB, then Bluetooth. Verify the actual `currentRoute` input before capture; never silently fall back to the built-in iPhone mic. The same policy applies to the vocal-range test. If no compatible microphone is available, explain that a headset microphone must be connected. Loss or replacement of the selected microphone stops capture.
+* Record is blocked when the output route is the built-in speaker or receiver, or no headset microphone can be selected.
 
 ### 7.3 Portrait & Mirroring
 * Copy `preferredTransform` to the composition video track; render size 1080×1920. Front camera mirrored at capture so preview, raw file, and final video all match.

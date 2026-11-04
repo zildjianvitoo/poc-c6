@@ -23,6 +23,11 @@ nonisolated enum UserFacingError: Equatable, Sendable {
     case nothingToExport
     case lyricsNotFound
     case lyricsUnavailable
+    case vocalRangeCaptureFailed
+    case headsetMicrophoneRequired
+    case vocalRangeTooNarrow
+    case keyPreviewFailed
+    case keyPreparationFailed
 
     var title: String {
         switch self {
@@ -41,6 +46,11 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .nothingToExport: "Nothing to export yet"
         case .lyricsNotFound: "No lyrics found"
         case .lyricsUnavailable: "Lyrics unavailable"
+        case .vocalRangeCaptureFailed: "We couldn't capture your voice"
+        case .headsetMicrophoneRequired: "Connect a headset microphone"
+        case .vocalRangeTooNarrow: "Try a higher comfortable note"
+        case .keyPreviewFailed: "The preview couldn't play"
+        case .keyPreparationFailed: "The keys couldn't be prepared"
         }
     }
 
@@ -75,6 +85,16 @@ nonisolated enum UserFacingError: Equatable, Sendable {
             "Check the title and artist, then search again. You can still pick a part without lyrics."
         case .lyricsUnavailable:
             "Lyrics couldn't be loaded right now. Check your connection and search again, or pick a part without them."
+        case .vocalRangeCaptureFailed:
+            "Try again in a quiet place. Speak naturally for the reading, and hold each sung note steadily without straining."
+        case .headsetMicrophoneRequired:
+            "Connect wired or Bluetooth earphones with a microphone, then try again. Headphones that only play audio can't be used as a microphone."
+        case .vocalRangeTooNarrow:
+            "Your highest note must be above your lowest note. Stay comfortable and don't force your voice."
+        case .keyPreviewFailed:
+            "Try listening again. If playback still fails, prepare the song again."
+        case .keyPreparationFailed:
+            "Try preparing the song again or choose another section."
         }
     }
 
@@ -94,6 +114,10 @@ nonisolated enum UserFacingError: Equatable, Sendable {
         case .nothingToExport: "film.stack"
         case .lyricsNotFound: "text.magnifyingglass"
         case .lyricsUnavailable: "wifi.slash"
+        case .vocalRangeCaptureFailed, .vocalRangeTooNarrow: "mic.badge.xmark"
+        case .headsetMicrophoneRequired: "headphones"
+        case .keyPreviewFailed: "speaker.slash"
+        case .keyPreparationFailed: "music.note.list"
         }
     }
 

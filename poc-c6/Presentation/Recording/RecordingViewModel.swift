@@ -58,6 +58,16 @@ final class RecordingViewModel {
     /// Enough trail for the piano roll's past window.
     private static let trailLength: TimeInterval = 2
 
+    private(set) var referenceVocalEnabled = true
+    private var karaoke: ConfigureReferenceVocalUseCase {
+        ConfigureReferenceVocalUseCase(playback: playback as? any ReferenceVocalPlayback)
+    }
+    var supportsReferenceVocal: Bool { karaoke.isAvailable }
+    func setReferenceVocalEnabled(_ enabled: Bool) {
+        referenceVocalEnabled = enabled
+        karaoke.execute(enabled: enabled)
+    }
+
     let song: PreparedSong
     private(set) var status: Status = .starting
     private(set) var loop: LoopStateController
@@ -66,6 +76,7 @@ final class RecordingViewModel {
     private(set) var route: AudioOutputRoute
     /// Debug readout: pitch samples in the last second, how many were voiced, and the last note.
     private(set) var pitchStats = PitchStats()
+    private(set) var microphoneName: String?
 
     @ObservationIgnored private let capture: any CaptureRepository
     @ObservationIgnored private let playback: any ReferencePlaybackRepository
@@ -87,6 +98,9 @@ final class RecordingViewModel {
     @ObservationIgnored private var rawVideoURL: URL?
     @ObservationIgnored private var isCapturing = false
     @ObservationIgnored private var recentSamples: [(time: TimeInterval, voiced: Bool)] = []
+    @ObservationIgnored private var trailDisplay: StabilizePitchDisplayUseCase
+    @ObservationIgnored private var noteDisplay: StabilizePitchDisplayUseCase
+    @ObservationIgnored private var displayTargetID: UUID?
 
     init(song: PreparedSong,
          capture: any CaptureRepository,
@@ -108,6 +122,8 @@ final class RecordingViewModel {
         self.onFinish = onFinish
         self.onDiscard = onDiscard
         self.allowsSpeaker = allowsSpeaker
+        trailDisplay = StabilizePitchDisplayUseCase(configuration: configuration)
+        noteDisplay = StabilizePitchDisplayUseCase(configuration: configuration)
         loop = LoopStateController(segments: song.segments, configuration: configuration)
         route = routeMonitor.currentRoute
     }
@@ -159,21 +175,33 @@ final class RecordingViewModel {
         }
         do {
             try await capture.prepare()
-            try playback.load(earphoneMixURL: song.earphoneMixURL)
+            microphoneName = (capture as? any MicrophoneInputProviding)?.microphoneName
+            if karaoke.isAvailable {
+                try karaoke.load(song: song)
+                karaoke.execute(enabled: referenceVocalEnabled)
+            } else {
+                try playback.load(earphoneMixURL: song.earphoneMixURL)
+            }
             observe()
             try await capture.startRecording()
             isCapturing = true
             // The file starts at the first video frame; playing before it exists would put the
             // first take's handle before the start of the file.
             try await waitForFirstFrame()
+            guard status == .starting else { return }
             sessionStart = capture.currentCaptureTime().seconds
             lastStorageCheck = sessionStart
             status = .recording
             perform(loop.begin(now: capture.currentCaptureTime().seconds))
             startTicking()
         } catch {
+            guard status == .starting else { return }
             stopObserving()
-            status = .failed(.recordingFailed(details: error.localizedDescription))
+            if let inputError = error as? any UserFacingConvertible {
+                status = .blocked(inputError.userFacingError)
+            } else {
+                status = .failed(.recordingFailed(details: error.localizedDescription))
+            }
         }
     }
 
@@ -205,9 +233,16 @@ final class RecordingViewModel {
     /// Stops after an interruption (PRD §5.8) and keeps the passed takes for a partial export.
     func interrupt() async {
         guard status == .recording else { return }
+        let microphoneMissing = (capture as? any MicrophoneInputProviding)?.isHeadsetMicrophoneActive == false
         if await stopCapture() != nil {
-            status = .interrupted(passedCount > 0 ? .recordingInterrupted : .nothingToExport)
+            status = .interrupted(microphoneMissing ? .headsetMicrophoneRequired
+                                  : (passedCount > 0 ? .recordingInterrupted : .nothingToExport))
         }
+    }
+
+    private func headsetMicrophoneChanged() async {
+        guard isCapturing else { return }
+        if await stopCapture() != nil { status = .interrupted(.headsetMicrophoneRequired) }
     }
 
     /// Export what passed before the interruption.
@@ -282,6 +317,9 @@ final class RecordingViewModel {
         case .startPlayback(let referenceTime):
             evaluations = []
             trail = []
+            trailDisplay.reset()
+            noteDisplay.reset()
+            displayTargetID = nil
             lastResult = nil
             do {
                 let heard = try playback.play(from: referenceTime)
@@ -344,7 +382,8 @@ final class RecordingViewModel {
         var stats = PitchStats()
         stats.samplesPerSecond = recentSamples.count
         stats.voicedPercent = recentSamples.isEmpty ? 0 : recentSamples.filter(\.voiced).count * 100 / recentSamples.count
-        stats.lastNote = voiced ? sample.frequency.flatMap { PitchMath.midi(fromFrequency: Double($0)) }.map { PitchMath.noteName(midi: Int($0.rounded())) } : nil
+        let rawMIDI = voiced ? sample.frequency.flatMap { PitchMath.midi(fromFrequency: Double($0)) }.map(Float.init) : nil
+        stats.lastNote = noteDisplay.execute(midi: rawMIDI, time: time).map { PitchMath.noteName(midi: Int($0.rounded())) }
         stats.lastLevelDB = sample.rmsDecibels
         pitchStats = stats
     }
@@ -369,6 +408,11 @@ final class RecordingViewModel {
             for await _ in interruptions { await self?.interrupt() }
         })
         tasks.append(Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .headsetMicrophoneChanged) {
+                await self?.headsetMicrophoneChanged()
+            }
+        })
+        tasks.append(Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: .captureRepositoryFailure) {
                 await self?.fail(.recordingFailed(details: "The camera or microphone stopped. Your passed segments are saved."))
             }
@@ -386,7 +430,14 @@ final class RecordingViewModel {
         let evaluation = TrackLivePitchUseCase(configuration: configuration)
             .execute(sample: sample, playbackAnchor: anchor, song: song)
         evaluations.append(evaluation)
-        trail.append(TrailPoint(songTime: evaluation.referenceTime, midi: evaluation.detectedMIDINote, isHit: evaluation.isHit))
+        if displayTargetID != evaluation.targetNoteID {
+            trailDisplay.reset()
+            displayTargetID = evaluation.targetNoteID
+        }
+        let midi = trailDisplay.execute(midi: evaluation.detectedMIDINote, time: evaluation.referenceTime)
+        // Colour and scoring must report the same measured result; visual smoothing must
+        // never turn an out-of-tune sample green or conceal a genuine note transition.
+        trail.append(TrailPoint(songTime: evaluation.referenceTime, midi: midi, isHit: evaluation.isHit))
         trail.removeAll { $0.songTime < evaluation.referenceTime - Self.trailLength }
     }
 }

@@ -17,6 +17,7 @@ struct ReadyView: View {
     var allowsSpeaker = false
     let onRecord: () -> Void
     let onChooseAnother: () -> Void
+    var onChangeKey: (() -> Void)? = nil
     @State private var playing: Track?
     @State private var route: AudioOutputRoute?
 
@@ -38,6 +39,12 @@ struct ReadyView: View {
             .padding()
             .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 12))
             previewButtons
+            if let onChangeKey {
+                Button("Compare Keys Again") {
+                    previewer.stop()
+                    onChangeKey()
+                }
+            }
             if song.separationMethod == .centerChannelCancellation || song.separationMethod == .coreML {
                 Text(song.separationMethod == .coreML
                      ? "Background music was separated on your iPhone. Faint original vocals may remain."
